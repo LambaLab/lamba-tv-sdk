@@ -198,7 +198,8 @@ interface LambaSwing { /** the turning speed at its peak, degrees a second */ sp
 interface LambaMotion {
   state: "off" | MotionState;
   /** Phones whose lamba.json declares "motion". Lamba's own screen asks the person (an iPhone asks from a tap); nobody is taught how to hold the phone. o.orientation true also gives "orientation" events. */
-  start(o?: { title?: string; orientation?: boolean }): Promise<MotionState>;
+  /** o.point true: tilt follows where the phone points, like a remote (turn it left or right, raise or lower it), for a game that aims at the screen; without it tilt is a marble on a tray (tip the phone). */
+  start(o?: { title?: string; orientation?: boolean; point?: boolean }): Promise<MotionState>;
   stop(): LambaSDK;
   /** The way the phone is held now is the middle again. */
   centre(): LambaSDK;

@@ -14,6 +14,7 @@ https://lamba.tv/devs/docs/design/.
 - [ ] Setting pictures: line icons written { "icon": ... } (24 x 24, 1.5 to 2 line), never as plain pictures; one kind per setting.
 - [ ] Options (hand, motion or camera, difficulty, mode) are tiles in the Settings tray, never buttons on the remote; game actions stay on the remote.
 - [ ] A camera game's remote is the camera view: the biggest thing, front and centre (about half the phone or more), keys small beside or below it.
+- [ ] Aiming at the screen with motion uses `Lamba.motion.start({ point: true })` (points like a remote); Motion or Camera chosen in the tray starts at once, the touch pad hidden; failure shows Try again, never a silent switch to touch; a screen aim marker goes within a second of no news.
 - [ ] The Host's phone is the live screen and one row of tiles (settings and actions), nothing in between.
 - [ ] Players get a full screen, realistic remote that never scrolls; no clip art, no emoji, no name step of its own.
 - [ ] The screen shows the game. Phones are the controls, not a copy of the screen.
