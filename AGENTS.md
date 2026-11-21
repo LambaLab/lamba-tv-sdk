@@ -262,6 +262,13 @@ Work in this order and do not skip a step:
    private app `lamba_private` then `lamba_make_live`.
    The name can also change on lamba.tv/devs (Rename on the app's page), and that name wins. `lamba_listing` and
    `lamba_status` give the current name: keep lamba.json `name` the same, and change it there when the developer renames.
+10. **Change the listing without a new version.** Once an app has a version, what players see in the store (sub, about,
+   How to play and the other `page.about` sections, `page.facts`, clips, card, tint, whatsNew, category, and name, icon,
+   age) changes with `lamba_edit_listing`: no upload, no review. Show the developer the change in a line or two first. It is
+   live at once when Lamba's listing rules pass (a refusal says why in one line: fix it and call again). Only a live app's
+   new name, icon, age or category waits for a person at Lamba; the store keeps the old one meanwhile. New clips go in as base64
+   (540 x 920 H.264 mp4 from `node lamba-clips.mjs`, with its `-poster.webp`), a new icon as `icon_svg`. A later version
+   keeps these unless its own lamba.json changes the same field, so put code changes in a version and words in the listing.
 
 ## Play it, every time
 
@@ -360,6 +367,7 @@ Once connected (docs: https://lamba.tv/devs/docs/ai/), it acts as the developer,
 | `lamba_try` | put a version that passed the check on the developer's own screens (7 days); with no `ver` it lists their screens by name |
 | `lamba_download` | get an app of theirs back into `./<app>/` to update it (big apps: `node lamba-check.mjs --download <app>`) |
 | `lamba_listing` | what players will see, and the questions to ask the developer before submitting |
+| `lamba_edit_listing` | change what players see (words, How to play, clips, pictures) without a new version: live at once; a live app's new name, icon, age or category waits for Lamba |
 | `lamba_profile` | save who made it (their name or studio), after asking them |
 | `lamba_private` | make it private: their own email's domain, named people |
 | `lamba_submit`, `lamba_make_live` | only when the developer asks |

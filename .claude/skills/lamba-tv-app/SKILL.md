@@ -68,6 +68,8 @@ download is the last resort, only if every way to connect fails, and then you ex
 11. **Upload** when the developer wants: `node lamba-check.mjs <app> --upload` (after "Connect Lamba", below) or
     `lamba_upload`. Then `lamba_status`. Submit only when the developer asks: `lamba_listing`, fill its gaps from the
     first answers, ask only what is still unknown, then `lamba_submit` (private: `lamba_private`, `lamba_make_live`).
+12. **The listing later:** words, How to play, clips and pictures change with `lamba_edit_listing`, no new version and no
+    review (only a live app's new name, icon, age or category waits for Lamba). Show the developer the change first.
 
 ## The kit is read only
 
