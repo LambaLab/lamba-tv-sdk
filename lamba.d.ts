@@ -88,6 +88,37 @@ interface LambaSound {
   onUnlock(fn: () => void): LambaSDK;
 }
 
+/** One thing in the Host's home that Lamba Home can switch (lamba.json "home": true). `id` is Home Assistant's entity_id ("light.desk_lamp"). Never a lock, an alarm or a camera. */
+interface LambaHomeDevice {
+  id: string;
+  /** What the Host calls it in Home Assistant, at most 40 characters. */
+  name: string;
+  kind: "light" | "switch" | "fan" | "cover" | "media" | "climate";
+  /** On now (a cover: open; a media player or heating: not off). */
+  on: boolean;
+  /** The room it is in, or "". */
+  area: string;
+}
+/** Why a Lamba.home call failed: the rejected Error also has `.error` with one of these. */
+type LambaHomeError = "not connected" | "not allowed" | "unreachable" | "busy";
+/** The Host's smart home, connected once by the Host in Lamba (Home Assistant). Declare "home": true in lamba.json (docs/sdk/HOME.md). The app never sees an address or a token. */
+interface LambaHome {
+  /** Is a home connected? Always { connected: false } on a Player's page. */
+  ready(): Promise<{ connected: boolean; system: "home-assistant" | null }>;
+  /** The Host's phone page only: opens Lamba's own Home Assistant page (address, Connect, Disconnect). The Host comes back with Back. Show it when ready() says not connected. */
+  connect(): Promise<void>;
+  /** The devices the Host already allowed for this app, with their state: never the whole house. */
+  devices(): Promise<LambaHomeDevice[]>;
+  /** The Host's phone page only: Lamba opens its own picker, the Host ticks the devices this app may switch from the screen (up to `max`, at most 24, kept with the app's settings for this screen) and it resolves with the devices chosen. Only the Host's tick allows a device: an app cannot allow one itself. Resolves with the devices as before when the Host cancels. */
+  choose(o?: { max?: number }): Promise<LambaHomeDevice[]>;
+  /** The screen page or the Host's phone: switch an allowed device on or off. Rejects with "not allowed" for any other id. At most 4 a second for each screen. */
+  set(id: string, on: boolean): Promise<{ on: boolean }>;
+  /** The screen page or the Host's phone: switch an allowed device to the opposite of how it is now. */
+  toggle(id: string): Promise<{ on: boolean }>;
+  /** The allowed devices' state, pushed when they change (about every 2 seconds while listening, and at once after a switch). Returns the way to stop. */
+  state(fn: (devices: LambaHomeDevice[]) => void): () => void;
+}
+
 /** What Lamba's music is doing (lamba.json "music": true). Lamba plays it itself, so an app never has to. */
 interface LambaMusicState {
   /** A style is chosen and its volume is up. */
@@ -188,7 +219,26 @@ declare var LambaUI: {
   fontPicker(o: { value?: { family?: string; weight?: number; italic?: boolean; id?: string }; sample?: string; extra?: { title?: string; items: object[] }; onChange(v: { family: string; weight: number; italic: boolean; id?: string; kind: string }): void }): LambaFontPicker;
   /** A press and hold key (shell/sdk/ui.js): start on the press (finger, mouse, Enter or Space; the finger is captured), beat(msHeld) every `every` ms (1500) while held, end(why) once: "up", "cancel", "away" (page hidden or left), "max" (after max ms, 20000) or "off". */
   hold(el: Element, o: { start?(): void; beat?(msHeld: number): void; end?(why: "up" | "cancel" | "away" | "max" | "off"): void; every?: number; max?: number }): { off(): void; release(): void; held(): boolean };
+  /** A Player's own colour strip ending in "Your own colour" (shell/sdk/ui.js): colours [{ id, name, hex }], onChange(hex). */
+  swatches(o: { colours: { id: string; name: string; hex: string }[]; value?: string; onChange?(hex: string): void }): { el: HTMLElement; get(): string; set(hex: string): void };
+  /** A swipe on a surface (shell/sdk/ui.js): fn once when a finger moves at least min px (60) that way in under 700 ms. */
+  swipe(el: Element, o: { dir?: "up" | "down" | "left" | "right" | "any"; min?: number; fn(s: { dx: number; dy: number; len: number; speed: number; ms: number }): void }): { off(): void };
+  /** Trace a shape with one finger: a dashed guide, the finger's line over it, onDone({ score 0 to 100, ms, pts }) when it lifts. trace.score(drawn, shape) and trace.shapes are pure. */
+  trace: { (o: { el?: Element; shape: "star" | "heart" | "house" | { pts: number[][] }; onDone(r: { score: number; ms: number; pts: number[][] }): void }): { el: HTMLElement; set(shape: "star" | "heart" | "house" | { pts: number[][] }): void; clear(): void; off(): void }; score(drawn: number[][], shape: number[][]): number; shapes: { [k: string]: number[][] } };
   [k: string]: any;
+};
+/** Rounds, points, a clock, sliding bars and confetti for a party game (shell/sdk/game.js, ES5, screen and phone pages). */
+declare var LambaGame: {
+  playlist(ids: string[], n: number, last?: string): string[];
+  award(order: (string | string[])[], took: string[], o?: { top?: number[]; part?: number }): { [id: string]: number };
+  rank(rows: { id: string; v: number }[], low?: boolean, ties?: boolean): string[] & string[][];
+  clock(o: { ms: number; every?: number; tick?(left: number): void; end?(): void }): { start(): any; pause(): any; resume(): any; stop(): any; left(): number; running(): boolean };
+  bars(el: Element, o?: { ms?: number }): { show(rows: { id: string; name: string; colour?: string; mark?: string; score: number; add?: number }[]): void; set(rows: { id: string; name: string; colour?: string; mark?: string; score: number }[]): void };
+  confetti(canvas: HTMLCanvasElement): { stop(): void };
+  /** Ten animals (a sloth is one) and eight colours; the face of an animal as an SVG string. */
+  animals: { id: string; name: string }[];
+  colours: { id: string; name: string; hex: string }[];
+  mark(animal: string, colour?: string, o?: { size?: number }): string;
 };
 
 /** What turning motion on ends with: "on" (tilt, swing and shake come now), "finger" (the person chose to play by touch), "denied" (the phone said no) or "none" (this phone has no motion). */
@@ -206,6 +256,8 @@ interface LambaMotion {
   on(type: "tilt", fn: (t: LambaTilt) => void): () => void;
   on(type: "swing", fn: (s: LambaSwing) => void): () => void;
   on(type: "shake", fn: (s: { strength: number }) => void): () => void;
+  /** How much the phone moves now, ten a second while motion is on: 0 held still, 1 a hard shake (a hand's tremor stays under 0.05). */
+  on(type: "energy", fn: (e: { level: number }) => void): () => void;
   on(type: "orientation", fn: (o: { alpha: number | null; beta: number | null; gamma: number | null }) => void): () => void;
 }
 /** A frame (see the "Motion and camera" topic: landmarks, joint angles and gesture names; never the picture). */
@@ -241,6 +293,8 @@ interface LambaTrack {
   /** Labels the frames while the switch is on: "start" and "end" of each prompt (its id, what was expected as plain numbers, its score 0 to 1), then "done" with the round's score and the phone to screen latency in ms. Nothing is kept or sent while the switch is off. */
   /** Lamba draws the live camera picture with Tracking Lab's nodes (body, hands, face) exactly over el while the camera runs (in a camera game el is the remote's hero: the biggest thing, front and centre): the picture never enters your page. null takes it away. */
   preview(el: Element | null): void;
+  /** The Host's phone, settings part only: a small still of the live camera (JPEG data address, 640 wide at most, mirrored like the screen shows a front camera) to mark things on, taken from the camera this phone runs with start(). Never available to a Player's page or the screen (rejects "not allowed"); rejects "no camera" when none runs. The page is sealed (no network): keep it for drawing, never send it on. */
+  still(): Promise<{ url: string; w: number; h: number; mirror: boolean }>;
   mark(o: { prompt?: string; at: "start" | "end" | "done"; expect?: { [k: string]: number }; score?: number; latency?: { med: number; p95: number; n: number } }): void;
 }
 
@@ -306,6 +360,8 @@ interface LambaVideoCall {
   over: boolean;
 }
 interface LambaVideo {
+  /** Same as Lamba.track.still(): a still of the camera for marking, the Host's settings part only (see there). */
+  still(): Promise<{ url: string; w: number; h: number; mirror: boolean }>;
   /** Someone started or stopped showing (from: "owner" or a Player's id; kind: their camera or their screen; slot 0 to 5, the sender's part of the split, or its place in the row of heads; kind "file": a picture or the pages of a PDF; head: a front camera floating round over the pictures). */
   on(ev: "show", fn: (s: { from: string; name: string; kind: "camera" | "screen" | "file"; on: boolean; slot: number }) => void): () => void;
   on(ev: "live", fn: (state: "on" | "off" | "none") => void): () => void;
@@ -316,7 +372,7 @@ interface LambaVideo {
   /** Opens live video: Lamba's own "Show my camera" or "Share my screen" tap on the phones and computers, and Lamba draws the picture over this page (never a video element of yours).
    * from: "camera" (phones), "screen" (computers) or "any" (default); senders 1 to 6 at once, a split of up to 6 parts (default 1; the plan's splitMax may allow fewer); heads: every FRONT camera is a round head floating over the pictures, taking no part (a back camera is a share and takes a part), default false; files: people may share a picture or a PDF (turned into page pictures on their own device, deleted when the share stops), default false; big: the tap is the remote's one big key; audio: the sound goes with the picture (a camera's microphone, a shared tab's sound), played by Lamba at the Host's volume, default false.
    * Resolves "on", or "none" when this screen cannot show it. live(false) ends it. */
-  live(o?: { from?: "camera" | "screen" | "any"; senders?: 1 | 2 | 3 | 4 | 5 | 6; heads?: boolean; files?: boolean; big?: boolean; audio?: boolean; /** the phone's first camera: "front" (default, a face, mirrored) or "back" (a whiteboard, a page) */ camera?: "front" | "back" } | false): Promise<"on" | "none" | "off">;
+  live(o?: { from?: "camera" | "screen" | "any"; senders?: 1 | 2 | 3 | 4 | 5 | 6; heads?: boolean; files?: boolean; /** true: Lamba draws the live picture UNDER your page, and your page is transparent where it draws nothing (leave the page background out), so you can draw over the picture (a glow, a ring). Your page never gets a pixel of it. */ under?: boolean; /** true: a Player keeps your own remote (phone.html) while video is live, instead of the copy of the screen; Lamba's Camera key stands at the foot below it. Use it when the remote is the camera view (Lamba.track.preview). */ own?: boolean; big?: boolean; audio?: boolean; /** the phone's first camera: "front" (default, a face, mirrored) or "back" (a whiteboard, a page) */ camera?: "front" | "back" } | false): Promise<"on" | "none" | "off">;
   /** Where Lamba draws the picture: the whole page by default (a half each with senders 2, a grid of 3 to 6 parts with a thin black line between). from: one sender's id (from a "show"); left out: every sender. place(null) puts it back. */
   place(rect: LambaVideoRect | null, from?: string): LambaSDK;
 }
@@ -451,6 +507,8 @@ interface LambaSDK {
   video: LambaVideo;
   /** The screen, "ink" declared: phones point and draw over this page, drawn by Lamba (docs/sdk/SENSORS.md, "Ink and pointers"). */
   ink: LambaInk;
+  /** The Host's smart home, "home": true declared (docs/sdk/HOME.md): list and allow devices on the Host's phone, switch the allowed ones from the screen. */
+  home: LambaHome;
   /** A sender that keeps to hz messages a second (1 to 30, the latest wins). From a phone to the screen it goes straight over the Wi-Fi when it can (a direct link, no round trip through the room) and through the room when not; your app cannot tell and never needs to: const out = Lamba.stream("pos", 20, "tv"); out({ x, y }). */
   stream(type: string, hz?: number, to?: string): ((data: { [k: string]: unknown }) => void) & { flush(): void };
   /** Phones: every Google font, through Lamba's own address (never straight from Google). */

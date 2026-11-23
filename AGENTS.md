@@ -77,6 +77,7 @@ Types for every call: `lamba.d.ts`. Every field of lamba.json: `lamba.schema.jso
    and back (`Lamba.track.cameras()`), and send the screen small messages with `Lamba.stream("name", 20, "tv")`, never whole frames (it goes straight over the Wi-Fi when it can and through the room when not; use `Lamba.send` for what must arrive, once). Ask `Lamba.track.start` only for what you use (`pose: false` for a hand game); `model` and `delegate` are left alone unless you know why.
    When the camera is how a Player plays (move a hand, the body), its view (`Lamba.track.preview(el)`) is the remote's hero: the biggest thing, front and centre, about half the phone or more, with at most a small key or two beside or below it. Never a thin strip above a big key the Player will not use; the camera or touch choice is a setting in the tray. `lamba-test` measures it.
    A game that aims at the screen with motion (a ring, a cursor) uses `Lamba.motion.start({ point: true })`, so the aim follows where the phone points like a remote; plain `tilt` is a marble on a tray (tip, not turn). When a Player picks Motion or Camera in the tray, start it at once and hide the touch pad; on failure one line with a Try again key, never a silent fall back to touch. On the screen, an aim marker disappears within a second of no news from that phone.
+   An app that draws over a live camera picture on the screen (a glow, a ring) opens `Lamba.video.live({ from: "camera", under: true })`: Lamba draws the picture UNDER the page, the page is transparent where it draws nothing, and the page never gets a pixel. `own: true` keeps the Player's own remote while video is live (so the remote can be `Lamba.track.preview`); the page hears its own camera start with `Lamba.video.on("show")` from `"you"`. On the Host's phone, in a settings part, `Lamba.track.still()` gives a small still of the camera to mark things on, never to send on. Hands and video share one camera stream; use `audio: false` with hands.
    The camera picture never leaves the phone. The simulator makes up both sensors, so `node lamba-test.mjs` can run the game; to feel motion, open the simulator on a phone.
    **The microphone only through Lamba, too.** Declare `"microphone"`. On a phone page: `Lamba.mic.level(fn)` (a loudness 0 to 1 and a
    blow), `Lamba.mic.words({ onText, onFinal })` (speech to text; check `Lamba.mic.canWords`), `Lamba.mic.record({ max })` (Lamba's own
@@ -192,6 +193,7 @@ Then build, and never ask these again. What each answer sets:
 | live video | `"video"` in `permissions`, `Lamba.video.live(...)` (see Live video in SENSORS.md) |
 | live voice | `"microphone"` in `permissions`, `Lamba.voice.live(...)` (see SENSORS.md) |
 | pointers and drawing | `"ink"` in `permissions`, `Lamba.ink.live(...)` on the screen page (see Ink and pointers in SENSORS.md); Lamba draws the pad and the layer |
+| the Host's smart home (lamps, fans, blinds) | `"home": true` in lamba.json, `Lamba.home.ready/choose/devices/set/toggle/state` (see HOME.md); the Host connects Home Assistant once in their account, the Host's phone page opens Lamba's picker with `choose` (an app can never allow a device itself), the screen page switches only those; a Player never; never a kids app |
 | laptops, two devices | nothing to declare: `Lamba.device` ("phone" or "computer"), `Lamba.screen.mirror` (the screen's copy beside the page), `Lamba.players[].person/devices/kinds`, `Lamba.onDevice` | (see SDK.md "A computer as a Player") |
 
 12. **Art fills the screen.** An ambient art app (a fireplace, an aquarium, scenery, a picture, a clock that is a picture)
@@ -203,6 +205,11 @@ Then build, and never ask these again. What each answer sets:
     canvas or film rectangle against the page's size at 1920 x 1080, 960 x 540 and a small page (a quarter of the width or
     height): no empty strip on any side. The pattern is in `references/patterns.md` ("Art that fills the screen") and the
     reasons in https://lamba.tv/devs/docs/design/#art-fills-the-screen.
+
+13. **A round-by-round party game uses the kit's pieces.** Never write your own round timer, points, playlist, sliding bars or confetti
+    (`<script src="../../shell/sdk/game.js">`, `LambaGame`: `playlist`, `award`, `rank`, `clock`, `bars`, `confetti`), a Player's own animal and colour (`LambaGame.animals` always has a sloth, `LambaGame.mark`, `LambaUI.swatches`), your own swipe or tracing maths
+    (`LambaUI.swipe`, `LambaUI.trace`), or your own way to tell if a phone is moving or still (`Lamba.motion.on("energy", fn)`: `level` 0 to 1, ten a
+    second). The screen keeps the round and the scores; a phone only reports what its Player did. `lamba check` refuses `LambaGame` without game.js.
 
 ## The loop
 

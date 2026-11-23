@@ -6133,7 +6133,8 @@ function checkRules(m, dir) {
   else m.outside.forEach(o => { if (!/^https:\/\/[a-z0-9.-]+\.[a-z]{2,}(:\d+)?$/i.test(o || "")) say("outside: " + o + " must be https://host (no path)"); });
   if (m.split !== undefined && m.split !== "tall" && m.split !== "letterbox") say("split must be \"tall\" (the screen page gets a half's own tall shape in a split screen and reads Lamba.layout) or \"letterbox\" (the default: the whole 16:9 page scaled into the half)");
   if (m.frame !== undefined && m.frame !== "none") say("frame must be \"none\" (the app starts without a frame; the Host can still pick one)");
-  for (const k of ["stagingOnly", "notInDemo", "listed", "liveCard", "music", "business", "workspace"]) if (m[k] !== undefined && typeof m[k] !== "boolean") say(k + " must be true or false");
+  for (const k of ["stagingOnly", "notInDemo", "listed", "liveCard", "music", "home", "business", "workspace"]) if (m[k] !== undefined && typeof m[k] !== "boolean") say(k + " must be true or false");
+  if (m.home === true && kidsOf(m)) say("home: a kids app never switches things in a house (take \"home\" out or make the app for another category)");
   if (m.position !== undefined && !(m.position && typeof m.position.after === "string" && ID.test(m.position.after))) say("position must be { after: <an app id> }");
   if (m.remote !== undefined && !(m.remote && typeof m.remote.ok === "boolean")) say("remote must be { ok: true | false }");
   // actions: one tap tiles in the Host's drawer (Feed, Tend the fire, New game); a tap sends { type: "action", key } to the screen
@@ -7322,6 +7323,10 @@ function checkFiles(o) {
     // 4. only its own files, the SDK and Lamba's /fonts/ (never Google's address); lamba.js on every page
     for (const r of html.matchAll(/\b(?:src|href)\s*=\s*["']([^"']+)["']/gi)) if (!allowedRef(p, r[1])) say(p + ": loads " + r[1] + (GOOGLE.test(r[1]) ? " straight from Google (fonts come through Lamba: use Lamba.fonts, or /fonts/css2?family=Name:wght@400 for a fixed font)" : " (only the app's own files, ../../shell/sdk/ and /fonts/ through Lamba.fonts)"));
     if (!srcs.some(s => /(^|\/)shell\/sdk\/lamba\.js$/.test(s))) say(p + ": does not load ../../shell/sdk/lamba.js");
+    // 4b. the game kit (2026-11-23): LambaGame needs game.js, LambaUI.swipe and LambaUI.trace need ui.js
+    { const code = inline.join("\n") + srcs.map(s => { const f = allowedRef(p, s) ? where(p, s) : null; return f && has.has(f) ? text(f) : ""; }).join("\n");
+      if (/\bLambaGame\b/.test(code) && !srcs.some(s => /(^|\/)shell\/sdk\/game\.js$/.test(s)) && !/LambaGame\s*=/.test(code)) say(p + ": uses LambaGame but does not load ../../shell/sdk/game.js");
+      if (/\bLambaUI\s*\.\s*(swipe|trace)\b/.test(code) && !srcs.some(s => /(^|\/)shell\/sdk\/ui\.js$/.test(s))) say(p + ": uses LambaUI.swipe or LambaUI.trace but does not load ../../shell/sdk/ui.js"); }
     // 5. a phone page never zooms
     if (p === screens.phone) { const vp = (html.match(/<meta[^>]+name=["']viewport["'][^>]*>/i) || [""])[0]; if (!/user-scalable\s*=\s*no/.test(vp)) say(p + ": the viewport needs user-scalable=no (phone pages never zoom)"); }
   }
@@ -7370,6 +7375,16 @@ function checkFiles(o) {
     if (/\bLamba\s*\.\s*ink\b|\b[A-Za-z_$][\w$]*\s*\.\s*ink\s*\.\s*(live|place|clear)\s*\(/.test(code)) {
       if (!perms.includes("ink")) say(f + ": uses Lamba.ink but lamba.json permissions does not include \"ink\" (add it: Lamba draws the pointers and the pen strokes)");
       if (!tvFiles.has(f)) say(f + ": Lamba.ink is for the screen page (the phone's own pad for pointing and drawing is Lamba's)");
+    }
+    if (/\bLamba\s*\.\s*home\b|\b[A-Za-z_$][\w$]*\s*\.\s*home\s*\.\s*(ready|devices|choose|connect|allow|set|toggle|state)\s*\(/.test(code)) {
+      if (m.home !== true) say(f + ": uses Lamba.home but lamba.json does not say \"home\": true (add it: Lamba's review checks why the app needs the Host's home)");
+      if (/\.\s*home\s*\.\s*allow\s*\(/.test(code)) say(f + ": Lamba.home.allow does not exist: the Host picks the devices in Lamba's own picker, opened with Lamba.home.choose({ max }) on the Host's phone page");
+      if (tvFiles.has(f) && /\.\s*home\s*\.\s*choose\s*\(/.test(code)) say(f + ": Lamba.home.choose is for the Host's phone page (Lamba's picker opens there; the screen only switches the devices allowed)");
+    }
+    if (/\b(track|video)\s*\.\s*still\s*\(/.test(code)) {   // a still of the camera for marking: the Host's phone only, kept for drawing, never sent on
+      if (tvFiles.has(f)) say(f + ": Lamba.track.still / Lamba.video.still is for the Host's phone page (a still of the camera never reaches the screen page)");
+      if (!perms.includes("camera")) say(f + ": uses a camera still but lamba.json permissions does not include \"camera\"");
+      if (/\.\s*(send|set|change|stream)\s*\([^;]{0,200}\b(url|still|dataUrl|picture)\b/.test(code)) say(f + ": the camera still is passed on (Lamba.send, Lamba.store.set or Lamba.change): it is for drawing on the Host's phone only and never leaves it (Lamba drops such messages, and Lamba's review refuses the app)");
     }
     if (/\bgetUserMedia\b|\bmediaDevices\b|\bgetDisplayMedia\b/.test(code)) say(f + ": opens the camera or microphone itself (use Lamba.track or Lamba.mic: the host asks the person and the picture or sound stays on the phone)");
     if (/\b(webkit)?SpeechRecognition\b|\bMediaRecorder\b|\bcreateMediaStreamSource\b/.test(code)) say(f + ": listens to the microphone itself (use Lamba.mic: words, loudness or a voice message, and Lamba asks the person first)");
@@ -7710,6 +7725,7 @@ async function checkUpload(bytes, o) {
   if ((m.permissions || []).includes("microphone")) { const mm = micModes({ paths: files.map(f => f.path), text }); notes.push("Microphone: " + (mm.length ? mm.join(", ") : "declared, but no use found")); }
   if ((m.permissions || []).includes("video")) notes.push("Video: shows a live camera or screen picture on the screen, only after a person taps Lamba's own button" + ((m.category === "kids" || (m.categories || []).includes("kids")) ? " (a kids app: Players' video is off until the Host turns it on)" : ""));
   if ((m.permissions || []).includes("ink")) notes.push("Ink: phones can point and draw over the screen with Lamba's own pad, and the Host can clear it");
+  if (m.home === true) notes.push("Home: asks for the Host's smart home (Home Assistant): the Host ticks, in Lamba's own picker, up to 24 lights, switches, fans, blinds, media players or heating to allow, and the screen may only switch those on and off. Check the app says why, and that nothing switches by accident");
   notes.push((m.outside || []).length ? "Reaches outside Lamba: " + m.outside.join(", ") : "Reaches no address outside Lamba");
   notes.push(m.guests ? "Players join with their phones: up to " + ((m.players || {}).max || 0) + " at once" : "No players: the Host's phone only");
   notes.push(files.length + " files, " + mb(files.reduce((n, f) => n + f.size, 0)));
@@ -7742,7 +7758,7 @@ async function kitNotice(base) {
 // ---------- the command ----------
 // node lamba-check.mjs [folder ...]   with no folder: every folder here that has a lamba.json (or this one)
 // Each folder is checked as Lamba's server checks the zip you upload: the same code (above), on the same files.
-const RESERVED = ["admin","alarm","app","apps","aquarium","art","aura","balloons","bowling","cheetah","chess","clock","colour","control","countdown","developers","devs","draw","draw-along","fireplace","flip","gallery","graffiti","home","lamba","mini-golf","motion-lab","neon","now-playing","paper","photos","ping-pong","pool","quotes","registry","remote","sdk","sdk-candles","sdk-draw","sdk-frames","sdk-hello","sdk-meeting-room","sdk-movecheck","sdk-roommic","sdk-showme","shell","stopwatch","tictactoe","timers","tracking-lab","welcome","window","winter-window","write-along","x","youtube"];
+const RESERVED = ["admin","alarm","app","apps","aquarium","art","aura","balloons","bowling","cheetah","chess","clock","colour","control","countdown","developers","devs","draw","draw-along","fireplace","flip","gallery","graffiti","home","lamba","mini-golf","motion-lab","neon","now-playing","paper","photos","ping-pong","pool","quotes","registry","remote","sdk","sdk-air-touch","sdk-candles","sdk-draw","sdk-frames","sdk-hello","sdk-meeting-room","sdk-movecheck","sdk-party-pack","sdk-roommic","sdk-showme","shell","stopwatch","tictactoe","timers","tracking-lab","welcome","window","winter-window","write-along","x","youtube"];
 const SKIP = n => n === "node_modules" || n.startsWith(".");   // .lamba/ (the key) is hidden, so never in a zip
 const SECRET = p => /(^|\/)\.lamba(\/|$)/.test(p);   // hidden files and folders stay out of an app's zip
 function walk(dir) {

@@ -235,6 +235,20 @@ Game seats (`players`, 50 at most) are for games; many people sending a little (
 `"visitors": { "max": 100, "perMinute": 40 }`, 200 at most, same page and messages, `Lamba.visitor` true. The room's real limits
 (4 KB a message, 40 a second from one phone, the line of 10) are in the SDK reference, "Game seats or an audience".
 
+## A party game: rounds, points, swipe, trace, still (screen and phone)
+
+```js
+// tv.html (needs ../../shell/sdk/game.js): the screen is the referee and keeps everything in Lamba.store
+var rounds = LambaGame.playlist(["rocket", "freeze", "trace"], 8, "");          // never the same twice in a row
+var pts = LambaGame.award(["v2", "v0", "v1"], ["v0", "v1", "v2", "v3"]);          // v2 3, v0 2, v1 1, +1 each who took part
+var clock = LambaGame.clock({ ms: 30000, tick: function (left) { draw(left); }, end: function () { endRound(); } }); clock.start();
+LambaGame.bars(document.getElementById("bars"), { ms: 4000 }).show(rows);         // rows: { id, name, colour, mark, score, add }
+// phone.html: a throw, a trace, and "is it moving?"
+LambaUI.swipe(document.getElementById("pad"), { dir: "up", fn: function () { Lamba.send({ type: "throw" }); } });
+LambaUI.trace({ el: document.getElementById("pad"), shape: "star", onDone: function (r) { Lamba.send({ type: "traced", score: r.score, ms: r.ms }); } });
+Lamba.motion.on("energy", function (e) { if (e.level > 0.25) Lamba.send({ type: "moved" }); });   // 0 still, 1 a hard shake, ten a second
+```
+
 ## A press and hold key (a Player's remote)
 
 ```js

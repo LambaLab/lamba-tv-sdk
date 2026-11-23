@@ -57,6 +57,7 @@ https://lamba.tv/devs/docs/design/.
 
 - [ ] Right for its `age` (`all`, `7+`, `13+`): no violence, fear, gambling, dating, ads, purchases, chat with strangers.
 - [ ] Each permission (`sound`, `camera`, `motion`, `country`) is needed; a camera app says on the screen and the phone when it is on.
+- [ ] `"home": true` (Lamba.home, the Host's smart home): only for an app whose point is switching things in a house; the Host ticks the devices in Lamba's own picker on their own phone (`Lamba.home.choose`, up to 24; the app cannot allow anything itself), the screen only switches those on and off, never a lock or alarm; nothing switches by itself without a person moving or tapping; it says clearly what a touch will do; a kids app never has it.
 - [ ] Each `outside` address is needed, and you can say why.
 - [ ] Never asks who someone is (age, address, phone, a photo of a face): `Lamba.me()` has their name.
 - [ ] Animal sets include a sloth; colour lists end with "pick your own colour"; choosing a sound in your own app part (phone.html) plays a sample.

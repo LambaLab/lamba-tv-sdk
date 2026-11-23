@@ -1,4 +1,4 @@
-# Lamba TV apps
+# Lamba TV SDK
 
 Build apps for Lamba TV: the screen shows your app, and everyone in the room plays or controls it from their phone. No app
 to install, no account for Players. One folder per app: a page for the screen, a page for the phone, and a `lamba.json`.
@@ -10,7 +10,7 @@ This repo is everything you need to build one, made for building with an AI codi
 Paste this into Claude Code or Codex, with your idea in its first line:
 
 ```
-Build me a Lamba TV app: a trivia game everyone answers on their phone. Keep it to one simple thing. Use github.com/LambaLab/lamba-tv
+Build me a Lamba TV app: a trivia game everyone answers on their phone. Keep it to one simple thing. Use github.com/LambaLab/lamba-tv-sdk
 
 What a Lamba TV app is
 - It runs on any screen: a screen at home, or a screen at work, in a shop or a classroom. Everyone in front of it plays or controls it from their own phone, by scanning the code on the screen. No app to install, no account for guests.
@@ -28,7 +28,7 @@ Make it great
 
 How to build it
 1. Before any code, ask me in one short message, with your suggestions: who it's for (everyone, families or made for kids), public on Lamba or private to my organization, its name, and whether Players join from their phones and how many.
-2. Get the kit from github.com/LambaLab/lamba-tv (its README: starter.zip into its own folder, lamba-app/) and follow its AGENTS.md and the lamba-tv-app skill.
+2. Get the Lamba TV SDK from github.com/LambaLab/lamba-tv-sdk (its README: starter.zip into its own folder, lamba-app/) and follow its AGENTS.md and the lamba-tv-app skill.
 3. Run the check and the self-test, look at every screenshot and go through the design checklist. Fix everything until they all pass. Then record its clips with lamba-clips.mjs.
 4. Then tell me in one sentence what you built and how I can try it. I'm not technical: guide me through every step in plain words and do every step you can yourself. If Lamba isn't connected yet, connect it yourself as the kit's AGENTS.md says (in a chat, end your message with the link I tap to approve), and upload it for me. Never leave me with a zip to upload myself unless every way to connect fails.
 ```
@@ -57,7 +57,7 @@ sign-in (`node lamba-login.mjs`) in Codex cloud and any terminal. Building, test
 ## The Claude Code plugin
 
 ```
-/plugin marketplace add LambaLab/lamba-tv
+/plugin marketplace add LambaLab/lamba-tv-sdk
 /plugin install lamba-tv@lamba
 ```
 

@@ -32,7 +32,7 @@ download is the last resort, only if every way to connect fails, and then you ex
    `lamba-check.mjs` or `lamba-test.mjs` next to the app? Get the kit first, as the start guide says. Inside the developer's
    own repository, the zip into its own folder (plain files, no `.git`), then work from inside it:
    `curl -fL https://lamba.tv/devs/kit/starter.zip -o /tmp/lamba.zip && unzip -q -o /tmp/lamba.zip -d /tmp/lamba-kit && mkdir -p lamba-app && cp -R /tmp/lamba-kit/lamba-starter/. lamba-app/ && rm -rf /tmp/lamba.zip /tmp/lamba-kit && cd lamba-app`
-   In an empty folder, `git clone https://github.com/LambaLab/lamba-tv.git lamba-app` also works. Run every `node lamba-*.mjs`
+   In an empty folder, `git clone https://github.com/LambaLab/lamba-tv-sdk.git lamba-app` also works. Run every `node lamba-*.mjs`
    command from inside `lamba-app/`; `node lamba-update.mjs` there refreshes the kit and never touches the app.
 3. **Name it.** Rename the app's folder and `id` together (a new app from the starter: `my-app` to the new id).
 4. **Write lamba.json first**: name (24), sub (40), about (80), `guests` and `players`, `permissions` (only what
