@@ -403,6 +403,10 @@
   "liveCard": {
    "type": "boolean"
   },
+  "hostCamera": {
+   "type": "boolean",
+   "description": "true: a camera app (Home Touch). The Host's main view is the app's own camera view (phone.html, view \"camera\": Lamba.track with Lamba.track.preview(el, { under: true })) in place of the copy of the screen, and Lamba shows that same camera live on the screen (Lamba.video, no Camera key) once the Host allows the camera. Needs permissions camera and video"
+  },
   "workspace": {
    "type": "boolean",
    "description": "true: part of Workspace on a company's screens (Lamba's own apps only). Outside a company it runs as always"
@@ -859,8 +863,12 @@
           "description": "Words people read: at most 24 characters, no en or em dash"
          },
          "players": {
-          "type": "boolean",
-          "description": "true: Players get this group as a tile on their phone too, the same picture tiles (the Host can turn it off)"
+          "enum": [
+           true,
+           false,
+           "own"
+          ],
+          "description": "true: Players get this group as a tile on their phone too, one value every Player and the Host share (the Host can turn it off). \"own\": each Player's own value (their animal, their colour), kept per Player, never shared; the screen hears it per Player"
          },
          "value": {
           "const": "app"
@@ -1160,7 +1168,10 @@
          ],
          "properties": {
           "players": {
-           "const": true
+           "enum": [
+            true,
+            "own"
+           ]
           }
          }
         }

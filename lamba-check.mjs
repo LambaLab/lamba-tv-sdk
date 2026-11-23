@@ -6135,6 +6135,13 @@ function checkRules(m, dir) {
   if (m.frame !== undefined && m.frame !== "none") say("frame must be \"none\" (the app starts without a frame; the Host can still pick one)");
   for (const k of ["stagingOnly", "notInDemo", "listed", "liveCard", "music", "home", "business", "workspace"]) if (m[k] !== undefined && typeof m[k] !== "boolean") say(k + " must be true or false");
   if (m.home === true && kidsOf(m)) say("home: a kids app never switches things in a house (take \"home\" out or make the app for another category)");
+  // hostCamera: the Host's main view is the app's own camera view (phone.html, view "camera") and Lamba shows that camera live on the screen
+  if (m.hostCamera !== undefined && typeof m.hostCamera !== "boolean") say("hostCamera must be true or false");
+  if (m.hostCamera === true) {
+    const pm = Array.isArray(m.permissions) ? m.permissions : [];
+    if (!pm.includes("camera") || !pm.includes("video")) say("hostCamera: the Host's phone shows its camera and the screen shows it live, so permissions needs \"camera\" and \"video\"");
+    if (!m.screens || !m.screens.phone) say("hostCamera: the camera view is the phone page (screens.phone, view \"camera\")");
+  }
   if (m.position !== undefined && !(m.position && typeof m.position.after === "string" && ID.test(m.position.after))) say("position must be { after: <an app id> }");
   if (m.remote !== undefined && !(m.remote && typeof m.remote.ok === "boolean")) say("remote must be { ok: true | false }");
   // actions: one tap tiles in the Host's drawer (Feed, Tend the fire, New game); a tap sends { type: "action", key } to the screen
@@ -6285,10 +6292,10 @@ function checkSettings(m, dir, say, str, file) {
     if (!f || typeof f !== "object" || !TYPES.includes(f.type)) { say(w + ".type must be one of " + TYPES.join(", ")); continue; }
     if (f.apply !== undefined && !["now", "send"].includes(f.apply)) say(w + ".apply must be \"now\" (at once) or \"send\" (with Send to screen)");
     if (f.resets !== undefined && (!Array.isArray(f.resets) || f.resets.some(r => !keys.includes(r)))) say(w + ".resets must list other settings");
-    const choiceList = c => {
+    const choiceList = (c, hex) => {   // hex: a colour setting's choices are named by their colour (#rrggbb)
       if (!Array.isArray(c) || !c.length || c.length > 120) { say(w + ".choices must be a list of 1 to 120"); return []; }
       c.forEach((x, i) => {
-        if (!x || typeof x !== "object" || !(typeof x.id === "number" || (typeof x.id === "string" && CHOICE.test(x.id)))) say(w + ".choices[" + i + "].id must be a number or short text");
+        if (!x || typeof x !== "object" || !(typeof x.id === "number" || (typeof x.id === "string" && (CHOICE.test(x.id) || (hex && HEX.test(x.id)))))) say(w + ".choices[" + i + "].id must be " + (hex ? "a colour (#rrggbb)" : "a number or short text"));
         str(x && x.name, 40, w + ".choices[" + i + "].name"); str(x && x.sub, 90, w + ".choices[" + i + "].sub", true); str(x && x.short, 24, w + ".choices[" + i + "].short", true);
         checkPicture(x && x.picture, dir, say, w + ".choices[" + i + "].picture", file);
       });
@@ -6323,7 +6330,7 @@ function checkSettings(m, dir, say, str, file) {
       }
     } else if (f.type === "colour") {
       if (!HEX.test(f.default || "")) say(w + ".default must be a colour (#rrggbb)");
-      if (f.choices !== undefined) choiceList(f.choices).forEach(id => { if (!HEX.test(id || "")) say(w + ".choices: each id is a colour (#rrggbb)"); });
+      if (f.choices !== undefined) choiceList(f.choices, true).forEach(id => { if (!HEX.test(id || "")) say(w + ".choices: each id is a colour (#rrggbb)"); });
     } else if (f.type === "colours") {
       if (f.swatches !== undefined) {
         if (!Array.isArray(f.swatches) || f.swatches.length < 2 || f.swatches.length > 24) say(w + ".swatches must be 2 to 24 of { name, hex }");
@@ -6360,7 +6367,7 @@ function checkSettings(m, dir, say, str, file) {
   // Players' controls need Players' seats: everyone past players.max joins as a visitor, and visitors never change settings
   // (2026-11-17: Lamba Fireplace had players.max 0 and 200 visitors, so the Host's "Players can change app settings" did nothing)
   const seats = m.players && Number.isInteger(m.players.max) ? m.players.max : 0;
-  const pg = m.settings && Array.isArray(m.settings.groups) && m.settings.groups.some(x => x && x.players === true);
+  const pg = m.settings && Array.isArray(m.settings.groups) && m.settings.groups.some(x => x && (x.players === true || x.players === "own"));
   if (m.guests === true && seats === 0 && (pg || (Array.isArray(m.forPlayers) && m.forPlayers.length)))
     say("players.max is 0, so nobody is ever a Player: everyone joins as a visitor, and visitors never see the settings marked \"players\": true or forPlayers. Give players.max 1 or more (the first phones are Players and get the settings drawer, the rest are visitors), or remove \"players\": true and forPlayers");
   // the groups: tiles in the order shown; host parts placed where they are listed
@@ -6378,8 +6385,9 @@ function checkSettings(m, dir, say, str, file) {
     if (HOST_GROUPS.includes(g.key)) say(w + ".key " + g.key + " is kept for the host");
     str(g.label, 24, w + ".label");
     // "players": true: the Player's phone gets this group as a tile too (the same picture tiles), as far as the Host allows
-    if (g.players !== undefined && typeof g.players !== "boolean") say(w + ".players must be true or false");
-    if (g.players === true) {
+    // "players": "own": each Player's OWN settings (their animal, their colour): kept per person, never shared, the screen hears them per Player
+    if (g.players !== undefined && typeof g.players !== "boolean" && g.players !== "own") say(w + ".players must be true (one value every Player and the Host share), \"own\" (each Player's own value) or left out");
+    if (g.players === true || g.players === "own") {
       if (m.guests !== true) say(w + ".players needs guests true (Players join the app)");
       if (Array.isArray(g.parts) && g.parts.some(x => x && x.app !== undefined)) say(w + ".players: an app part (parts[].app) is the Host's own page: a group for Players holds settings only");
     }
@@ -6409,10 +6417,15 @@ function checkSettings(m, dir, say, str, file) {
       }
       if (!keys.includes(p.setting)) { say(v + ".setting must be one of settings.fields"); return; }
       if (pk.has(p.setting)) say(v + ": " + p.setting + " twice"); pk.add(p.setting); used.add(p.setting);
-      if (g.players === true && S.fields[p.setting] && ["strokes", "transforms"].includes(S.fields[p.setting].type)) say(v + ": a " + S.fields[p.setting].type + " setting is drawn on the Host's phone only, so it cannot be in a group for Players");
+      if ((g.players === true || g.players === "own") && S.fields[p.setting] && ["strokes", "transforms"].includes(S.fields[p.setting].type)) say(v + ": a " + S.fields[p.setting].type + " setting is drawn on the Host's phone only, so it cannot be in a group for Players");
+      if (g.players === "own" && S.fields[p.setting] && S.fields[p.setting].type === "photo") say(v + ": a photo setting is kept with the screen, not per Player: use \"players\": true for a photo slot");
+      if (g.players === "own" && S.fields[p.setting] && S.fields[p.setting].hidden) say(v + ": a hidden setting is in no tile, so a Player cannot change it");
       if (p.presets !== undefined && p.presets !== true) say(v + ".presets must be true (a list setting's named collections)");
     });
   });
+  // a setting is one value for everyone or each Player's own, never both
+  { const ownK = new Set(S.groups.filter(g => g && g.players === "own").flatMap(g => (g.parts || []).flatMap(partKeys)));
+    S.groups.forEach((g, i) => { if (g && g.players !== "own") (g.parts || []).flatMap(partKeys).forEach(k => { if (ownK.has(k)) say("settings.groups[" + i + "]: " + k + " is also in a group with \"players\": \"own\" (each Player's own value): a setting is shared or each Player's own, never both"); }); }); }
   for (const h of HOST_PARTS) if (!seen.has("host:" + h)) say("settings.groups: place { \"host\": \"" + h + "\" } where the host's " + h + " goes");
   keys.forEach(k => { if (!used.has(k) && !(S.fields[k] && S.fields[k].hidden)) say("settings.fields." + k + " is in no group (or mark it hidden: true)"); });
 }
@@ -6430,6 +6443,8 @@ function registryEntry(m) {
   e.clips = m.clips || []; e.listed = m.listed !== false; e.stagingOnly = m.stagingOnly === true; e.notInDemo = m.notInDemo !== false; e.liveCard = m.liveCard === true; if (m.business === true) e.business = true; if (m.workspace === true) e.workspace = true;
   // the settings a Player may change (the parts of the groups marked "players": true), for the room to check a Player's change
   e.playerKeys = ((m.settings || {}).groups || []).filter(g => g && g.players === true).flatMap(g => (g.parts || []).flatMap(partKeys)).filter((k, i, a) => a.indexOf(k) === i);
+  // the settings each Player keeps for themselves (the parts of the groups marked "players": "own"): the room keeps them per person
+  e.ownKeys = ((m.settings || {}).groups || []).filter(g => g && g.players === "own").flatMap(g => (g.parts || []).flatMap(partKeys)).filter((k, i, a) => a.indexOf(k) === i);
   e.live = Object.keys((m.settings || {}).fields || {}).filter(k => m.settings.fields[k].apply === "now");   // settings that go to the screen at once
   // money (docs/sdk/MONETIZE.md): the prices in one shape for the hosts and the store, null for a free app. For an app from
   // outside Lamba the server puts the prices its admin approved here instead (worker/money.js)
@@ -6693,7 +6708,7 @@ const perfWarnings = list => list.map(x => (x.where && x.where[0] ? x.where[0] +
 
 // ---------- what the simulator measured ----------
 // raw (sim.js measureRun): { v, dur, screen: [w, h], phases: { settle, base, act, idle: [from, to] in s }, tv: probe, player: probe,
-// joincard: [{ t, share, cx, cy, on }], words: { type: n }, problems: [sentences], sound: { unlockAt } }
+// joincard: [{ t, share, cx, cy, on, p (seated Players) }], words: { type: n }, problems: [sentences], sound: { unlockAt } }
 // probe (seal.js): { sec: { s: bucket }, loops: { key: { name, site, n } }, timers: [{ ms, site, ticks, draws, px, cleared }], filmFilterSite,
 // styleSite, film: { fps: [], rung, under, floor }, mem: [[t, bytes]], canvases, audio: { sources, locked, first }, unlocked, longtasks, layout }
 const R = n => Math.round(n), R1 = n => Math.round(n * 10) / 10;
@@ -6769,6 +6784,11 @@ function measuredFindings(raw, manifest) {
   if (jc.length) {
     const big = jc.filter(x => x.share >= 0.12), middle = big.filter(x => Math.abs(x.cx - .5) < .2 && Math.abs(x.cy - .5) < .2), cats = [].concat(m.categories || [], m.category || []);
     const ambient = cats.some(c => ["ambient", "art", "clocks", "calm"].includes(c));
+    // the big card over the app while someone is already in (Nagi, 2026-11-23, Party Pack: one Player joined, the card kept
+    // covering their animal and "Waiting for one more Player")
+    const overP = big.filter(x => x.p > 0);
+    if (!ambient && overP.length >= 5) add({ id: "joincard-over-players", severity: "should", title: "The big join card covers the screen while a Player is in",
+      where: [], evidence: ["A Player was in and the card still covered " + R(Math.max(...overP.map(x => x.share)) * 100) + "% of the screen for " + overP.length + " s"], why: "The people who joined cannot see themselves or what the screen is waiting for.", fix: "Ask for size: Lamba.players.length ? \"corner\" : \"full\", and send it again whenever Players come or go." });
     if (ambient && middle.length >= 3) add({ id: "joincard-middle", severity: "should", title: "The join card sits in the middle of the scene",
       where: [], evidence: ["The card covered " + R(Math.max(...middle.map(x => x.share)) * 100) + "% of the screen, in the middle, for " + middle.length + " s"], why: "An ambient app is art on the wall: a big card in the middle hides it.", fix: "Ask for Lamba.joinCard({ show: true, size: \"corner\" }) once someone is connected, and leave the corner free." });
     else if (big.length > 40) add({ id: "joincard-big", severity: "should", title: "The big join card stays up", where: [], evidence: ["The card covered " + R(Math.max(...big.map(x => x.share)) * 100) + "% of the screen for " + big.length + " s"], why: "People cannot see the app behind it.", fix: "Ask for size \"corner\" once someone has joined." });
@@ -6992,6 +7012,16 @@ function noEmoji(m, say, pages, text, scriptsOf, where, has) {
   }
 }
 
+// ---- rule 15b: the Host's camera view (lamba.json "hostCamera") ----
+function hostCameraView(m, say, warnings, text, scriptsOf, where, has) {
+  const p = (m.screens || {}).phone, html = p ? text(p) : null; if (typeof html !== "string") return;
+  const { inline, srcs } = scriptsOf(html), own = srcs.map(s => where(p, s)).filter(f => f && f.indexOf("@sdk/") !== 0 && has.has(f));
+  const code = [inline.join("\n"), ...own.map(f => text(f) || "")].join("\n").replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'])\/\/.*$/gm, "$1");
+  const draws = /\bview\s*===?\s*["']camera["']|["']camera["']\s*===?\s*[\w.]*view\b/.test(code);
+  if (m.hostCamera === true && !draws) say(p + ": lamba.json says hostCamera, so the Host's main view is this page in view \"camera\" (Lamba.screen.view === \"camera\"): the camera big (Lamba.track.start, Lamba.track.preview(el, { under: true })), the app's marks over it, one line and a key or two at the foot");
+  if (m.hostCamera !== true && draws) warnings.push(p + ": draws view \"camera\", which Lamba shows only with \"hostCamera\": true in lamba.json (the Host's camera as the main view)");
+}
+
 // ---- rule 15: the player remote ----
 const HOLD_TO = /\b(press and hold|long[- ]press|hold|holding)\b[^<>"'.]{0,30}\b(to|for)\b[^<>"'.]{0,24}/i;
 function playerRemote(m, say, warnings, text, scriptsOf, where, has) {
@@ -7023,6 +7053,14 @@ function playerRemote(m, say, warnings, text, scriptsOf, where, has) {
     if (!tile && !button && !built) warnings.push(p + ": the app has sound, but Players have no sound control. Add \"forPlayers\": [\"sound\"] to lamba.json.");
   }
   if (ask) say(p + ": asks the Player for a name. " + (m.askName === true ? "Lamba's join asks each Player's name once, for every app, before your page opens: use Lamba.me().name" : "Lamba asks it for you when lamba.json has \"askName\": true, and only then: use Lamba.me().name"));
+}
+
+// ---- a party game starts with its Players (docs/sdk/DESIGN.md, "Party games"): a Start action for the Host and no Ready on any phone page ----
+// Cheap signal only: the Host has an action named start (or begin, play) and no Player phone page says Ready, Start, Begin or Play.
+function startRule(m, warnings, pages, text) {
+  if (m.guests !== true || !((m.players || {}).max >= 2) || !Array.isArray(m.actions) || !m.actions.some(a => a && /^(start|begin|play)(-game)?$/i.test(a.key || ""))) return;
+  const ph = m.screens && m.screens.phone; if (!ph) return; const html = text(ph); if (html === null) return;
+  if (!/(?<![.\w])ready(?![\w(])|>\s*(start|begin|play)( game)?\s*<|["'](start|begin|play)( game)?["']/i.test(html)) warnings.push("lamba.json: only the Host's \"" + m.actions.find(a => a && /^(start|begin|play)/i.test(a.key)).key + "\" action starts the game, and no Player's phone page has a Ready button. A party game starts when every Player has pressed Ready (one Player plays alone, a practice game); the Host's Start is only a shortcut.");
 }
 
 // ---- askName: the name step is for apps that show names (a warning each way) ----
@@ -7103,6 +7141,12 @@ function phoneDesign(src, f, error, warn) {
   if (head || hdr) W("a heading or title at the top (" + (head ? "<" + head.tag + ">" : "<header>") + "). Nothing goes at the top: Lamba's own bar names the app and the Player.");
   if (corner) W("a profile or name corner (class \"" + corner.cls.find(c => !/^l-/.test(c)) + "\"). Lamba shows who you are; leave it out.");
   const ownHead = els.find(e => !isL(e) && (e.tag === "button" || e.tag === "a" || e.role === "button") && /^(done|back|leave|exit|easier to see|invite( a friend)?)$/i.test((e.label || "").trim()));
+  // a button of its own for an option (Change animal, Pick a colour, Settings, Options): a Player's remote has only the game's own controls;
+  // every option is a tile in the sheet, "players": "own" for what each Player keeps (docs/sdk/MANIFEST.md, "Each Player's own settings")
+  const OPTWORD = /^(change|pick|choose|select|switch|set|edit|customi[sz]e|new)\s+(my |your |the |an? )?(animal|colou?r|avatar|character|name|hand|mode|level|difficulty|speed|skin|theme|team|look|style|language|options?|settings?)\b|^(settings?|options?|preferences|customi[sz]e|menu)$/i;
+  const optBtn = els.find(e => clickable(e) && e.label.length <= 28 && OPTWORD.test(e.label.trim()))
+    || (/(?:textContent|innerText)\s*=\s*["'](?:Change|Pick|Choose|Select|Customi[sz]e)\s+(?:my |your |the |an? )?(?:animal|colou?r|avatar|character|name|hand|mode|level|difficulty|skin|theme|team|look|style|language|options?|settings?)["']/i.test(code) ? { label: "Change ..." } : null);
+  if (optBtn) W("a \"" + optBtn.label.trim().slice(0, 30) + "\" button on the remote. The remote has only the game's own controls (the main action); every option is a tile in the sheet under it. Put it in lamba.json as a setting in a group: \"players\": \"own\" when each Player keeps their own (an animal, a colour), \"players\": true when everyone shares one.");
   const ownDot = els.find(e => !isL(e) && e.cls.some(c => /^(conn(ection)?-?(dot|light|lamp|status)|status-?dot|online-?dot|live-?dot)$/.test(c)));
   if (ownHead) W("a \"" + ownHead.label.trim().slice(0, 30) + "\" button of its own. Lamba draws the header, the same for the Host and every Player: the app's name with a small chevron (the details slide up from it: Share, Leave) and the connection dot at the top right. Never your own Back, Done, Leave, eye or Invite at the top.");
   if (ownDot) W("a connection dot of its own (class \"" + ownDot.cls.find(c => !/^l-/.test(c)) + "\"). Lamba draws it at the top right of the phone; leave it out.");
@@ -7326,6 +7370,7 @@ function checkFiles(o) {
     // 4b. the game kit (2026-11-23): LambaGame needs game.js, LambaUI.swipe and LambaUI.trace need ui.js
     { const code = inline.join("\n") + srcs.map(s => { const f = allowedRef(p, s) ? where(p, s) : null; return f && has.has(f) ? text(f) : ""; }).join("\n");
       if (/\bLambaGame\b/.test(code) && !srcs.some(s => /(^|\/)shell\/sdk\/game\.js$/.test(s)) && !/LambaGame\s*=/.test(code)) say(p + ": uses LambaGame but does not load ../../shell/sdk/game.js");
+      if (/\bLambaAir\b/.test(code) && !srcs.some(s => /(^|\/)shell\/sdk\/air\.js$/.test(s)) && !/LambaAir\s*=/.test(code)) say(p + ": uses LambaAir but does not load ../../shell/sdk/air.js");
       if (/\bLambaUI\s*\.\s*(swipe|trace)\b/.test(code) && !srcs.some(s => /(^|\/)shell\/sdk\/ui\.js$/.test(s))) say(p + ": uses LambaUI.swipe or LambaUI.trace but does not load ../../shell/sdk/ui.js"); }
     // 5. a phone page never zooms
     if (p === screens.phone) { const vp = (html.match(/<meta[^>]+name=["']viewport["'][^>]*>/i) || [""])[0]; if (!/user-scalable\s*=\s*no/.test(vp)) say(p + ": the viewport needs user-scalable=no (phone pages never zoom)"); }
@@ -7398,7 +7443,10 @@ function checkFiles(o) {
   // 15. an app Players join has a player remote, and never asks for a name
   const warnings = warningsLater;
   playerRemote(m, say, warnings, text, scriptsOf, where, has);
+  // 15b. the Host camera view (lamba.json "hostCamera"): the phone page draws view "camera"; a page that draws it without hostCamera is never shown
+  hostCameraView(m, say, warnings, text, scriptsOf, where, has);
   askNameRule(m, warnings, pages, text, scriptsOf, where, has);
+  startRule(m, warnings, pages, text);
   // 16. phone pages use Lamba's controls (docs/sdk/UI.md)
   for (const p of pages.filter(x => x !== screens.tv && x !== screens.picture)) {
     const html = text(p); if (html === null) continue;

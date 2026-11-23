@@ -165,7 +165,7 @@ Lamba.ready(function (L) {
 
 - View `guest` is a Player's whole phone: a real remote made for this app, never a page that scrolls. View `part` is a part
   of the settings drawer the app draws (lamba.json `{ "app": "<part>" }`, `L.screen.part`). There is no view for the Host.
-- The Host's phone is Lamba's: the live screen and one row of tiles. A one tap thing the Host does is an action in
+- The Host's phone is Lamba's: the live screen and one row of tiles (with `"hostCamera": true`, the app's view `camera` instead of the live screen: the phone's camera big, the app's marks over it, Lamba showing the same camera live on the screen with no key; SENSORS.md "The Host's camera as the main view"). A one tap thing the Host does is an action in
   lamba.json, heard on the screen page:
 
 ```js
@@ -234,6 +234,19 @@ example `candles`.
 Game seats (`players`, 50 at most) are for games; many people sending a little (fan a fire, cheer, vote) are an audience:
 `"visitors": { "max": 100, "perMinute": 40 }`, 200 at most, same page and messages, `Lamba.visitor` true. The room's real limits
 (4 KB a message, 40 a second from one phone, the line of 10) are in the SDK reference, "Game seats or an audience".
+
+## Air Touch: hold to press (screen page)
+
+```js
+// tv.html (needs ../../shell/sdk/air.js): only the Host's fingertips (from === "owner") count
+var hold = LambaAir.hold({ ms: 600 }), s;
+function frame(dt) {
+  s = hold.step(hostTipInside, dt);                       // { fill, fired, flash, inside }
+  if (s.fired) Lamba.home.toggle("light.hall");           // once; again only after the finger leaves and returns
+  ctx.clearRect(0, 0, W, H); LambaAir.draw(ctx, cx, cy, r, s);   // outline at once, fill bottom up, flash; never a push gesture or depth
+  if (LambaAir.busy(s)) requestAnimationFrame(next);
+}
+```
 
 ## A party game: rounds, points, swipe, trace, still (screen and phone)
 

@@ -77,7 +77,7 @@ Types for every call: `lamba.d.ts`. Every field of lamba.json: `lamba.schema.jso
    and back (`Lamba.track.cameras()`), and send the screen small messages with `Lamba.stream("name", 20, "tv")`, never whole frames (it goes straight over the Wi-Fi when it can and through the room when not; use `Lamba.send` for what must arrive, once). Ask `Lamba.track.start` only for what you use (`pose: false` for a hand game); `model` and `delegate` are left alone unless you know why.
    When the camera is how a Player plays (move a hand, the body), its view (`Lamba.track.preview(el)`) is the remote's hero: the biggest thing, front and centre, about half the phone or more, with at most a small key or two beside or below it. Never a thin strip above a big key the Player will not use; the camera or touch choice is a setting in the tray. `lamba-test` measures it.
    A game that aims at the screen with motion (a ring, a cursor) uses `Lamba.motion.start({ point: true })`, so the aim follows where the phone points like a remote; plain `tilt` is a marble on a tray (tip, not turn). When a Player picks Motion or Camera in the tray, start it at once and hide the touch pad; on failure one line with a Try again key, never a silent fall back to touch. On the screen, an aim marker disappears within a second of no news from that phone.
-   An app that draws over a live camera picture on the screen (a glow, a ring) opens `Lamba.video.live({ from: "camera", under: true })`: Lamba draws the picture UNDER the page, the page is transparent where it draws nothing, and the page never gets a pixel. `own: true` keeps the Player's own remote while video is live (so the remote can be `Lamba.track.preview`); the page hears its own camera start with `Lamba.video.on("show")` from `"you"`. On the Host's phone, in a settings part, `Lamba.track.still()` gives a small still of the camera to mark things on, never to send on. Hands and video share one camera stream; use `audio: false` with hands.
+   An app that draws over a live camera picture on the screen (a glow, a ring) opens `Lamba.video.live({ from: "camera", under: true })`: Lamba draws the picture UNDER the page, the page is transparent where it draws nothing, and the page never gets a pixel. `own: true` keeps the Player's own remote while video is live (so the remote can be `Lamba.track.preview`); the page hears its own camera start with `Lamba.video.on("show")` from `"you"`. On the Host's phone, in a settings part, `Lamba.track.still()` gives a small still of the camera to mark things on, never to send on. When the Host's own phone IS the camera (prop it up, tap things in its picture), say `"hostCamera": true` in lamba.json: the Host's main view is phone.html in view `camera` (the camera big with `Lamba.track.preview(el, { under: true, nodes: false, fit: "contain" })`, `el` shaped like the picture, marks over it in the same box, one line and a flip key at the foot) and Lamba shows that camera live on the screen with no key to press; never a Camera tile, a Camera key to tap or a board shaped like the screen. Hands and video share one camera stream; use `audio: false` with hands.
    The camera picture never leaves the phone. The simulator makes up both sensors, so `node lamba-test.mjs` can run the game; to feel motion, open the simulator on a phone.
    **The microphone only through Lamba, too.** Declare `"microphone"`. On a phone page: `Lamba.mic.level(fn)` (a loudness 0 to 1 and a
    blow), `Lamba.mic.words({ onText, onFinal })` (speech to text; check `Lamba.mic.canWords`), `Lamba.mic.record({ max })` (Lamba's own
@@ -211,6 +211,11 @@ Then build, and never ask these again. What each answer sets:
     (`LambaUI.swipe`, `LambaUI.trace`), or your own way to tell if a phone is moving or still (`Lamba.motion.on("energy", fn)`: `level` 0 to 1, ten a
     second). The screen keeps the round and the scores; a phone only reports what its Player did. `lamba check` refuses `LambaGame` without game.js.
 
+14b. **Every Air Touch app touches by holding.** A fingertip resting on an object in the camera picture is the only press: the outline shows at
+    once, colour fills it, full it switches with a short flash, leaving early drains it (`<script src="../../shell/sdk/air.js">`, `LambaAir.hold`,
+    `LambaAir.draw`). Never a push gesture and never a depth model (a single camera cannot tell touching from hovering). Count only the Host's
+    fingertips (`from === "owner"`). `lamba check` refuses `LambaAir` without air.js.
+
 ## The loop
 
 Work in this order and do not skip a step:
@@ -240,7 +245,7 @@ Work in this order and do not skip a step:
    - Options (hand, motion or camera, difficulty, mode) are tiles in the Settings tray, not buttons on the remote; game actions stay on the remote.
    - A camera game's remote is the camera view, big, front and centre; no big key the Player does not use.
    - The screen shows the game. Phones are the controls, not a copy of the screen.
-   - The Host's phone is the live screen and one row of tiles (settings and actions), nothing in between.
+   - The Host's phone is the live screen and one row of tiles (settings and actions), nothing in between (a `hostCamera` app: its camera view instead of the live screen).
    - Players get a full screen, realistic remote that never scrolls; no clip art, no emoji, no name step of its own.
    - The join card fills the screen while it waits, then moves to a corner (an ambient app: Lamba keeps it small in a corner,
      then the code alone; ask for "full" and "corner" as usual).

@@ -47,7 +47,9 @@ interface LambaTheme {
 }
 
 /** A Player is one PERSON: on a phone and a laptop they are one entry. id: their first device's id (messages from any of their devices come from it); person: the same id on every device and every list; devices and kinds: how many (up to 3) and what ("phone" | "computer"). */
-interface LambaPlayer { id: string; name: string; person: string; devices: number; kinds: Array<"phone" | "computer"> }
+interface LambaPlayer { id: string; name: string; person: string; devices: number; kinds: Array<"phone" | "computer">;
+  /** This Player's own settings (groups with "players": "own" in lamba.json): the default until they, or Lamba.setOwn, choose. Only for an app that has such a group. */
+  own?: Record<string, unknown> }
 /** A device of a Player joined or left (Lamba.onDevice). */
 interface LambaDevice { id: string; person: string; kind: "phone" | "computer"; on: boolean }
 
@@ -241,6 +243,15 @@ declare var LambaGame: {
   mark(animal: string, colour?: string, o?: { size?: number }): string;
 };
 
+/** Air Touch, hold to press (shell/sdk/air.js, ES5): a fingertip rests on an object, an outline shows, colour fills it, full it fires once with a flash; leaving early drains it. */
+declare var LambaAir: {
+  hold(o?: { ms?: number; drainMs?: number; flashMs?: number; reduced?: boolean }): { step(inside: boolean, dtMs: number): LambaAirState; reset(): any; fill(): number };
+  draw(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, s: LambaAirState, o?: { colour?: string; line?: string; width?: number; reduced?: boolean }): void;
+  busy(s: LambaAirState): boolean;
+  reduced(): boolean;
+};
+interface LambaAirState { fill: number; fired: boolean; flash: number; inside: boolean; locked: boolean; reduced: boolean }
+
 /** What turning motion on ends with: "on" (tilt, swing and shake come now), "finger" (the person chose to play by touch), "denied" (the phone said no) or "none" (this phone has no motion). */
 type MotionState = "on" | "finger" | "denied" | "none";
 interface LambaTilt { /** -1 (left) to 1 (right) */ x: number; /** -1 (top of the screen) to 1 (bottom): the screen's way, so ball.y += tilt.y moves it down */ y: number }
@@ -291,8 +302,8 @@ interface LambaTrack {
   /** Hears the choice change and an upload go. Returns a function that stops it. */
   onHelp(fn: (h: { can: boolean; on: boolean; sent: 0 | 1 }) => void): () => void;
   /** Labels the frames while the switch is on: "start" and "end" of each prompt (its id, what was expected as plain numbers, its score 0 to 1), then "done" with the round's score and the phone to screen latency in ms. Nothing is kept or sent while the switch is off. */
-  /** Lamba draws the live camera picture with Tracking Lab's nodes (body, hands, face) exactly over el while the camera runs (in a camera game el is the remote's hero: the biggest thing, front and centre): the picture never enters your page. null takes it away. */
-  preview(el: Element | null): void;
+  /** Lamba draws the live camera picture with Tracking Lab's nodes (body, hands, face) exactly over el while the camera runs (in a camera game el is the remote's hero: the biggest thing, front and centre): the picture never enters your page. null takes it away. o.under: drawn UNDER your page (transparent there) so you draw marks over it; o.nodes false: the plain picture; o.fit "contain": the whole camera picture inside el, never cut (shape el like the picture, f.aspect, and it fills el exactly), "cover" (the default) fills el and cuts the overflow. */
+  preview(el: Element | null, o?: { under?: boolean; nodes?: boolean; fit?: "cover" | "contain" }): void;
   /** The Host's phone, settings part only: a small still of the live camera (JPEG data address, 640 wide at most, mirrored like the screen shows a front camera) to mark things on, taken from the camera this phone runs with start(). Never available to a Player's page or the screen (rejects "not allowed"); rejects "no camera" when none runs. The page is sealed (no network): keep it for drawing, never send it on. */
   still(): Promise<{ url: string; w: number; h: number; mirror: boolean }>;
   mark(o: { prompt?: string; at: "start" | "end" | "done"; expect?: { [k: string]: number }; score?: number; latency?: { med: number; p95: number; n: number } }): void;
@@ -444,6 +455,9 @@ interface LambaSDK {
   onStatus(fn: (status: LambaStatus) => void): LambaSDK;
   onScreen(fn: (screen: LambaScreen) => void): LambaSDK;
   onSee(fn: (level: number) => void): LambaSDK;
+  /** The time zone the Host picked for the screen ("Europe/Amsterdam"); "" means the screen's own. Use it as `timeZone` in Intl.DateTimeFormat or toLocaleTimeString for any wall time you show. */
+  timeZone: string;
+  onTimeZone(fn: (zone: string) => void): LambaSDK;
   /** Screen: what Lamba's music is doing, or null when the app does not declare "music": true. */
   music: LambaMusicState | null;
   /** Screen: fn(state) when the style, the track or whether it plays changes. */
@@ -470,6 +484,8 @@ interface LambaSDK {
   buy(id?: string): Promise<{ ok: boolean; why: "" | "cancelled" | "host" | "owned" | "off" }>;
   /** A phone's message always goes to the screen. The screen's goes to `to`. Its type is never "action" (the host's). */
   send(msg: LambaMessage, to?: To): LambaSDK;
+  /** Screen: give a Player (LambaPlayer.person) their own settings, e.g. a free animal when they join. The room checks the values like the Player's own change. */
+  setOwn(person: string, patch: Record<string, unknown>): LambaSDK;
   /** Part: change settings; final false while still moving (a slider being dragged). */
   change(patch: { [key: string]: SettingValue }, final?: boolean): LambaSDK;
   store: LambaStore;
