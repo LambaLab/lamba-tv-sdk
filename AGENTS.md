@@ -190,10 +190,16 @@ Then build, and never ask these again. What each answer sets:
 | phones, players | `guests` and `players` `{ min, max }` (0 when only the Host's phone controls it) |
 | sounds | `"sound"` in `permissions` and the sound files in the app's folder (see Sound in SDK.md); none: leave it out |
 | films | `"sound"` only if they have sound; the films made with `lamba-film.mjs` (see FILMS.md) |
+| moving Keynote or PowerPoint slides from the Host's own computer, a deck as a PDF | `"desktop"` in `permissions`, `Lamba.desktop.can/pair/key/toPdf` on the Host's phone page (see Lamba helper in SENSORS.md); the free Lamba helper app at lamba.tv/helper does the pressing, never roll your own |
 | live video | `"video"` in `permissions`, `Lamba.video.live(...)` (see Live video in SENSORS.md) |
 | live voice | `"microphone"` in `permissions`, `Lamba.voice.live(...)` (see SENSORS.md) |
 | pointers and drawing | `"ink"` in `permissions`, `Lamba.ink.live(...)` on the screen page (see Ink and pointers in SENSORS.md); Lamba draws the pad and the layer |
-| the Host's smart home (lamps, fans, blinds) | `"home": true` in lamba.json, `Lamba.home.ready/choose/devices/set/toggle/state` (see HOME.md); the Host connects Home Assistant once in their account, the Host's phone page opens Lamba's picker with `choose` (an app can never allow a device itself), the screen page switches only those; a Player never; never a kids app |
+| the Host's smart home (lamps, fans, blinds, speakers, screens) | `"home": true` in lamba.json, `Lamba.home.ready/choose/devices/set/toggle/state/controls` (see HOME.md); keys, volume and brightness are only Lamba's own `Lamba.home.controls(id)` sheet on the Host's phone (never draw your own remote, no call sends a key); a home camera that can turn gets `Lamba.camera.turn(el, { when })` on the Host's phone view; the Host connects Home Assistant once in their account, the Host's phone page opens Lamba's picker with `choose` (an app can never allow a device itself), the screen page switches only those; a speaker (`kind: "media"`) plays and pauses, a screen (`kind: "tv"`, an Android or Google TV in Home Assistant) switches on and off, and Lamba decides which from Home Assistant, never from the page; say "Screen" in your words; a Player never; never a kids app |
+| an Air Touch camera the Host picks (their phone, a room camera device, the screen's camera, a home camera) | `"cameraSource": true` in lamba.json, `Lamba.camera.source/onSource/choose/show` (see Camera sources in SENSORS.md); follow `source.where`: `"phone"` is Lamba.track and Lamba.video as always, `"screen"` is `Lamba.camera.show` on the screen page; never list cameras yourself |
+| the Host's hand reaching into a picture (cut out, over a home camera) | `Lamba.track.preview(el, { only: "hands", over: true })` on the phone page (Lamba cuts the hand with a skin mask, draws it as a sticker with a white outline and shadow (`look: "plain"` opts out) and draws the fingertip dot and ring itself; `Lamba.track.pointer(over, progress)` tightens the ring over a glow), the tips in the picture's own places; `Lamba.camera.show` draws its own loader (`step` 1 to 3), show your marks only when it is `"live"` (see `docs/sdk/SENSORS.md` "Hands over a picture") |
+| the Host's real hand on the screen, over its home camera picture | `Lamba.track.preview(el, { only: "hands", over: true, share: "screen" })` on the phone; on the screen `Lamba.camera.show(...).on("handvideo", on => ...)` and keep your ghost until it is `true`. Lamba cuts the hand out ON THE PHONE and sends only that cutout to the screen (never the camera picture); your page never gets a pixel, a Player never has it (see `docs/sdk/SENSORS.md` "Your hand on the screen") |
+| hands of a person IN a camera picture (the room) | `Lamba.camera.show(el, { hands: true })`, `session.on("hands")`, `session.hands(on)`; the same device switched twice within 1.5 s answers `error: "same"` (ignore it); the home camera pauses 60 s on an app switch by itself (see `docs/sdk/SENSORS.md` "Camera sources") |
+| several home cameras in one layout (a grid, a "+" tile, tap a tile to pick it) | `Lamba.camera.sources()` and `onSources(fn)` (up to 4 allowed cameras, names only), `Lamba.camera.show(tileEl, { id, small: true })` for each tile (its own loader, the small stream; draw its name only when `"live"`), the Host's phone: `Lamba.camera.use(id)` and `Lamba.camera.add()` (Lamba's picker); a hidden `layout` setting the phone sets and the screen follows; keep anything per camera (spots) keyed by `id` (`sources()` rejects when the list could not be read, an empty list always means none allowed: clear nothing for a rejection); hands, turning and Find are for the ONE big view (see `docs/sdk/SENSORS.md` "Several cameras at once") |
 | laptops, two devices | nothing to declare: `Lamba.device` ("phone" or "computer"), `Lamba.screen.mirror` (the screen's copy beside the page), `Lamba.players[].person/devices/kinds`, `Lamba.onDevice` | (see SDK.md "A computer as a Player") |
 
 12. **Art fills the screen.** An ambient art app (a fireplace, an aquarium, scenery, a picture, a clock that is a picture)
@@ -215,6 +221,20 @@ Then build, and never ask these again. What each answer sets:
     once, colour fills it, full it switches with a short flash, leaving early drains it (`<script src="../../shell/sdk/air.js">`, `LambaAir.hold`,
     `LambaAir.draw`). Never a push gesture and never a depth model (a single camera cannot tell touching from hovering). Count only the Host's
     fingertips (`from === "owner"`). `lamba check` refuses `LambaAir` without air.js.
+
+14c2. **Pinch to flip, one call.** Next and previous by hand: `<script src="../../shell/sdk/flip.js">` then `Lamba.hands.flip({ on(dir) })`, dir `"next"` (right hand pinch) or `"previous"` (left hand pinch). Call it on the screen page AND the Player's phone page: it uses the screen's own camera (declare "camera") or a propped phone, handles mirroring, fires once per pinch (600 ms cooldown), ignores a moving, small or far hand, shows a short edge glow and one first-time hint, and gives `"none"` on old TV browsers. Never write your own pinch code for this (docs/sdk/SENSORS.md "Hand flip").
+14d. **Hands are a fine wireframe and a device is a radial menu, not gestures.** `Lamba.track.preview(el, { only: "hands", over: true })` draws each hand as a thin white wireframe of its
+    landmarks (`look: "wire"`, the default: no camera pixel, so the screen draws it from the landmarks you share with `LambaHandCut.wire`). Holding a fingertip on any device glow switches
+    its power; a pinch (`Lamba.track.on("gesture", fn)`, `<script src="../../shell/sdk/gesture.js">`) on a screen's glow, or a tap, opens a radial menu of thin rings round it (Power, Back,
+    Home, OK, arrows, volume) that works by pointing and holding still, by a pinch and by touch; keys go out with `Lamba.home.key` through `LambaGesture.remote().press(key)`. Palm, flick and
+    edge volume are off by default (they misfire). One caption pill says what to do; nothing overlaps. See SENSORS.md, "The air menu".
+14c. **An Air Touch spot can have a real shape, and the kit finds it.** `LambaVision.outline(source, { x, y })` (tap, thousandths of the picture)
+    gives the object's outline as `poly`; a spot is `{ id, x, y, r, poly }` and a circle spot without `poly` stays valid. `LambaAir.toPx`, `LambaAir.hit`
+    and `LambaAir.draw(..., { poly })` hit-test and draw it. `Lamba.home.findLights(source, { onStep })` (Host's phone page, `find.js` and `shape.js`)
+    blinks each light once to find it and puts every light back, also on a cancel, a hidden page (sent at once: iOS freezes timers) or a changed camera; one pass at a time (`LambaFind.busy()`: skip your own switching meanwhile); lights it did not see are `missing`, never guessed. `LambaVision.label`
+    and `LambaVision.suggest(devices, labels)` put the likely device first; the Host still confirms with one tap. Everything runs on the phone, models
+    load on first use, `LambaVision.release()` when setup is done. On the Host's phone page the picture is a still: `Lamba.track.still().then(LambaVision.fromStill)`, and `findLights(Lamba.track.still)`. Suggest with no model: `LambaVision.glow` then `LambaVision.suggest(devices, labels, { placed })`. `LambaVision.label` is HEAVY (about +400 MB, one model at a time; `lamba check` warns): avoid it. An `actions` tile is also heard by the Host's camera view (`Lamba.on("action")`). Never switch a device from a guess. `lamba check` refuses `LambaShape` and
+    `LambaFind` without their files and `findLights` on a screen page.
 
 ## The loop
 
@@ -253,7 +273,11 @@ Work in this order and do not skip a step:
    - A Player is in with one tap: no forms, no accounts.
    - It runs on old screens, and the phone page never zooms.
 7. **Clips:** `node lamba-clips.mjs <app>` records 2 or 3 clips in the simulator, in the exact format, and lists
-   them in lamba.json. Look at each poster, and write captions that say what each clip shows.
+   them in lamba.json. Look at each poster, and write captions that say what each clip shows. `--script steps.json`
+   plays a story: a list of steps, or `{ "setup": [...], "steps": [...], "once": true }` (a step is `{ "phone": "g1" | "owner", "tap": "css" }`
+   or `{ "wait": ms }`, and may carry `"upload": "file"` or `"text": "typed"`); `--main owner` records the Host's phone, `--players "A,B"`,
+   `--host "C"` and `--guests N` set the people, `--name x --caption "..."` records one clip without touching lamba.json, and
+   `--live scenario.mjs --base <local worker>` records against the real worker and remote (Lamba's own repository only; see ASSETS.md).
    **Assets, then look at them yourself** (https://lamba.tv/devs/docs/assets/): `icon.svg` (a square SVG, the drawing inside the
    middle 9 to 51 of 60, the rounded corners cut the rest), `card.svg` (exactly 320 x 180, anything that matters 12 units
    in from the edges), and the 2 or 3 clips with their `-poster.webp` (540 x 920, H.264, 6 to 14 s, captions of at most 60

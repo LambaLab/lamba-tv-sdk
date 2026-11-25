@@ -6042,7 +6042,7 @@ const nameProblem = v => typeof v !== "string" || !v.trim() ? "Give it a name."
 // what the host keeps for itself in every app's settings (the frame round the app, and its brightness)
 const HOST_KEYS = ["frame", "frc", "fw", "mw", "matc", "fday", "fown", "fall", "bright", "pc"];   // pc: the Host lets Players change the settings of the groups marked "players": true
 const TYPES = ["choice", "switch", "number", "text", "list", "colour", "colours", "strokes", "transforms", "photo"];
-const PERMISSIONS = ["sound", "camera", "motion", "country", "microphone", "video", "ink"];   // ink: phone pointers and drawing over the screen (Lamba.ink.live); camera: the picture never leaves the phone; video: a live picture shown on the screen (Lamba.video.live)
+const PERMISSIONS = ["sound", "camera", "motion", "country", "microphone", "video", "ink", "recording", "desktop"];   // ink: phone pointers and drawing over the screen (Lamba.ink.live); camera: the picture never leaves the phone; video: a live picture shown on the screen (Lamba.video.live)
 const AGES = ["all", "7+", "13+"];
 // the app's shelf on the phone and the showcase (optional for now; the listing on /devs asks for it)
 const CATEGORIES = ["games", "party", "kids", "learning", "art", "music", "clocks", "calm", "photos", "sports", "tools"];
@@ -6137,10 +6137,18 @@ function checkRules(m, dir) {
   if (m.home === true && kidsOf(m)) say("home: a kids app never switches things in a house (take \"home\" out or make the app for another category)");
   // hostCamera: the Host's main view is the app's own camera view (phone.html, view "camera") and Lamba shows that camera live on the screen
   if (m.hostCamera !== undefined && typeof m.hostCamera !== "boolean") say("hostCamera must be true or false");
+  if (m.hostPlays !== undefined && typeof m.hostPlays !== "boolean") say("hostPlays must be true or false");
+  if (m.hostPlays === true && (!m.screens || !m.screens.phone || m.guests !== true)) say("hostPlays: the Host plays through the app's phone page (screens.phone, view guest), and only an app Players join (guests: true) has one");
   if (m.hostCamera === true) {
     const pm = Array.isArray(m.permissions) ? m.permissions : [];
     if (!pm.includes("camera") || !pm.includes("video")) say("hostCamera: the Host's phone shows its camera and the screen shows it live, so permissions needs \"camera\" and \"video\"");
     if (!m.screens || !m.screens.phone) say("hostCamera: the camera view is the phone page (screens.phone, view \"camera\")");
+  }
+  // cameraSource: an Air Touch app takes Lamba's camera source choice (the Host's phone, a room camera device, the screen's camera, a home camera)
+  if (m.cameraSource !== undefined && typeof m.cameraSource !== "boolean") say("cameraSource must be true or false");
+  if (m.cameraSource === true) {
+    const pm = Array.isArray(m.permissions) ? m.permissions : [];
+    if (!pm.includes("camera") || !pm.includes("video")) say("cameraSource: a phone may be the camera and the screen shows the picture live, so permissions needs \"camera\" and \"video\"");
   }
   if (m.position !== undefined && !(m.position && typeof m.position.after === "string" && ID.test(m.position.after))) say("position must be { after: <an app id> }");
   if (m.remote !== undefined && !(m.remote && typeof m.remote.ok === "boolean")) say("remote must be { ok: true | false }");
@@ -7032,6 +7040,8 @@ function playerRemote(m, say, warnings, text, scriptsOf, where, has) {
   const html = text(p); if (html === null) return;
   const { inline, srcs } = scriptsOf(html), own = srcs.map(s => where(p, s)).filter(f => f && f.indexOf("@sdk/") !== 0 && has.has(f));
   const code = [inline.join("\n"), ...own.map(f => text(f) || "")].join("\n");
+  // a camera used as a controller replaces the controls it stands in for; the content preview stays (docs/sdk/DESIGN.md, "A camera that controls replaces the controls")
+  if (/LambaFlip\.view\s*\(/.test(code) && /\bclear\s*:\s*["'][^"']*preview/i.test(code)) warnings.push(p + ": hides the copy of the screen while the camera shows (LambaFlip.view clear: \"#preview\"). A camera that controls takes the place of the keys it stands in for; the copy of the screen stays where it is (docs/sdk/DESIGN.md)");
   if (/screen\s*\.\s*view|\bview\s*===?/.test(code) && !/["']guest["']/.test(code)) say(p + ": Players join this app, so it needs a player remote: the page in view \"guest\" (Lamba.screen.view === \"guest\"), the whole phone, one main action");
   const ask = /<input\b[^>]*\b(placeholder|aria-label|name|id|autocomplete)\s*=\s*["'][^"']*\b(name|nickname|given-name)\b/i.test(html) || /\.(placeholder|autocomplete)\s*=\s*["'][^"']*\b(name|nickname|given-name)\b/i.test(code);
   // the remote must show what it can do: no hold-to-act with no visible control, and sound has a control Players can see
@@ -7061,6 +7071,36 @@ function startRule(m, warnings, pages, text) {
   if (m.guests !== true || !((m.players || {}).max >= 2) || !Array.isArray(m.actions) || !m.actions.some(a => a && /^(start|begin|play)(-game)?$/i.test(a.key || ""))) return;
   const ph = m.screens && m.screens.phone; if (!ph) return; const html = text(ph); if (html === null) return;
   if (!/(?<![.\w])ready(?![\w(])|>\s*(start|begin|play)( game)?\s*<|["'](start|begin|play)( game)?["']/i.test(html)) warnings.push("lamba.json: only the Host's \"" + m.actions.find(a => a && /^(start|begin|play)/i.test(a.key)).key + "\" action starts the game, and no Player's phone page has a Ready button. A party game starts when every Player has pressed Ready (one Player plays alone, a practice game); the Host's Start is only a shortcut.");
+}
+
+// ---- game controls (docs/sdk/DESIGN.md, "Game controls, one rule" and "Players can pause"), cheap signals only ----
+// 1. a greyed action tile: Lamba.action(key, { off: ... }) on the screen page; show only what fits now with { hide }
+// 2. a game with rounds (an "end" or "pause" action for the Host) whose Player page has no pause of its own
+function controlsRule(m, warnings, pages, text, scriptsOf, where, has) {
+  const tv = m.screens && m.screens.tv, ph = m.screens && m.screens.phone, th = tv ? text(tv) : null;
+  if (th !== null && th !== undefined && /\.action\(\s*["'][a-z][a-z0-9-]*["']\s*,\s*\{[^}]*\boff\s*:/.test(th) && !/\.action\(\s*["'][a-z][a-z0-9-]*["']\s*,\s*\{[^}]*\bhide\s*:/.test(th))
+    warnings.push(tv + ": an action tile is greyed with off. Show the Host only what fits now: Lamba.action(key, { hide: true }) for a tile that does not apply (Start before anyone is in, Skip and End outside a game).");
+  if (m.guests === true && th !== null && th !== undefined && !/\.hint\s*\(/.test(th)) warnings.push(tv + ": Players join this app, but the Host is never told the next step. Call Lamba.hint(\"Players scan the code on it, or try as a player\") while nobody is in, and clear it with Lamba.hint(\"\") once they are.");
+  if (m.guests === true && Array.isArray(m.actions) && m.actions.some(a => a && /^(end|pause)(-game)?$/i.test(a.key || "")) && ph) {
+    const pt = text(ph); if (pt !== null && pt !== undefined && !/["']pause["']|>\s*Pause\s*</i.test(pt)) warnings.push(ph + ": a game with rounds, but a Player cannot pause it. Add a small Pause in a bottom corner of the controller during a game (Resume while paused), off the keys.");
+    // 3. the same game never reads .away: a Player whose phone locks or drops out would let the others win (docs/sdk/DESIGN.md, "A game pauses by itself")
+    if (th !== null && th !== undefined && scriptsOf && where && has) {
+      const { inline, srcs } = scriptsOf(th), code = th + "\n" + inline.join("\n") + "\n" + srcs.map(x => where(tv, x)).filter(f => f && f.indexOf("@sdk/") !== 0 && has.has(f)).map(f => text(f) || "").join("\n");
+      if (!/\.away\b/.test(code)) warnings.push(tv + ": a game with rounds never reads .away on Lamba.players. A Player whose phone locks or drops out would just lose, or let the others win. Pause by itself and say who it waits for: Lamba.onPlayers(function (list) { var gone = list.filter(function (p) { return p.away; }); ... }), and carry on when they are back (docs/sdk/SDK.md, \"A Player who is away\").");
+    }
+  }
+}
+
+// ---- a home-made sheet with no handle (docs/sdk/UI.md "A sheet"): people cannot tell where it starts and ends ----
+const SHEETY = /role\s*=\s*["']dialog["']|setAttribute\(\s*["']role["']\s*,\s*["']dialog["']|aria-modal|(?:position\s*:\s*fixed[^"'`]*bottom\s*:\s*0|bottom\s*:\s*0[^"'`]*position\s*:\s*fixed)[^"'`]*border-radius\s*:\s*\d+px\s+\d+px\s+0/i;
+function sheetRule(m, warnings, pages, text, scriptsOf, where, has) {
+  for (const p of pages) {
+    const html = text(p); if (html === null) continue;
+    const { inline, srcs } = scriptsOf(html), own = srcs.map(s => where(p, s)).filter(f => f && f.indexOf("@sdk/") !== 0 && has.has(f));
+    const code = (html + "\n" + inline.join("\n") + "\n" + own.map(f => text(f) || "").join("\n")).replace(/\/\*[\s\S]*?\*\//g, "");
+    if (SHEETY.test(code) && !/LambaSheet|LambaUI\s*\.\s*sheet|\bls-grab\b|data-grab|class\s*=\s*["'][^"']*\b(handle|grabber|grab-bar)\b|\.(handle|grabber|grab-bar)\b/i.test(code))
+      warnings.push(p + ": a home-made sheet or dialog with no handle bar: people cannot tell where it starts and ends. Use LambaUI.sheet (a handle, a dim backdrop, a drag down or a tap beside it closes it; docs/sdk/UI.md \"A sheet\").");
+  }
 }
 
 // ---- askName: the name step is for apps that show names (a warning each way) ----
@@ -7285,6 +7325,20 @@ function filmRefs(code) {
   }
   return out;
 }
+// a warning: an app's own page or style reshapes Lamba's settings sheet inside a landscape or short-screen rule. The sheet's phone-on-its-side
+// layout (shut to begin with, a Settings handle, a vertical list, a close chevron, shell/groups.js and controls.css) is Lamba's, the same in every app
+function landscapeSheetRule(has, text, warnings) {
+  const SHEET = /\.(ctl-drawer|g-row|g-tile|g-home|g-head|g-grab|g-edge|g-shut|g-collapsed|g-at-home)\b/;
+  for (const f of [...has].filter(f => [".html", ".css"].includes(ext(f)))) {
+    const code = (text(f) || "").replace(/\/\*[\s\S]*?\*\//g, "").replace(/<!--[\s\S]*?-->/g, "");
+    if (/\.ctl-drawer[^{}]*\{[^}]*\b(box-shadow|border-radius|background)\b/.test(code)) { warnings.push(f + ": restyles Lamba's settings sheet (.ctl-drawer: shadow, corners or colour). The sheet's rounded corners show the surface above in one colour (no shadow around them) in every app: leave its look alone (docs/sdk/DESIGN.md, \"The settings sheet\")"); return; }
+    for (const mm of code.matchAll(/@media[^{]*(?:landscape|max-height|aspect-ratio)[^{]*\{/g)) {
+      let depth = 1, i = mm.index + mm[0].length; const start = i;
+      while (i < code.length && depth) { const c = code[i++]; if (c === "{") depth++; else if (c === "}") depth--; }
+      if (SHEET.test(code.slice(start, i))) { warnings.push(f + ": changes Lamba's settings sheet (.ctl-drawer, .g-row, .g-tile...) inside a landscape rule. On a phone on its side Lamba's sheet starts shut, lies at the edge as a vertical list with a close chevron, the same in every app: leave its layout alone and let your page fill the room beside it (docs/sdk/DESIGN.md, \"The settings sheet on a phone on its side\")"); return; }
+    }
+  }
+}
 function filmRule(m, has, text, say, warnings, where) {
   const seen = new Set();
   for (const f of [...has].filter(f => [".html", ".js"].includes(ext(f)))) {
@@ -7340,9 +7394,11 @@ function checkFiles(o) {
   const allowedRef = (from, ref) => {
     if (/^\/fonts\/(css2\?|gs\/s\/)/.test(ref)) return true;   // Google Fonts through Lamba's own address (Lamba.fonts, worker/fonts.js)
     if (/^(data:|#|mailto:)/.test(ref)) return true;
+    if (/^https:\/\/www\.youtube-nocookie\.com\/embed\//.test(ref) && (m.outside || []).includes("https://www.youtube-nocookie.com")) return true;   // a YouTube slide (Air Slides): the one frame an app may open, only when lamba.json lists it in outside
     if (/^[a-z]+:/i.test(ref) || ref.startsWith("//") || ref.startsWith("/")) return false;
     return where(from, ref) !== null;
   };
+  const warningsLater = [];
   for (const p of pages) {
     const html = text(p); if (html === null) continue;
     const { inline, srcs } = scriptsOf(html);
@@ -7371,6 +7427,12 @@ function checkFiles(o) {
     { const code = inline.join("\n") + srcs.map(s => { const f = allowedRef(p, s) ? where(p, s) : null; return f && has.has(f) ? text(f) : ""; }).join("\n");
       if (/\bLambaGame\b/.test(code) && !srcs.some(s => /(^|\/)shell\/sdk\/game\.js$/.test(s)) && !/LambaGame\s*=/.test(code)) say(p + ": uses LambaGame but does not load ../../shell/sdk/game.js");
       if (/\bLambaAir\b/.test(code) && !srcs.some(s => /(^|\/)shell\/sdk\/air\.js$/.test(s)) && !/LambaAir\s*=/.test(code)) say(p + ": uses LambaAir but does not load ../../shell/sdk/air.js");
+      if ((/\bLambaGesture\b/.test(code) || /\bLamba\.track\.(gestures|on)\b/.test(code)) && !srcs.some(s => /(^|\/)shell\/sdk\/gesture\.js$/.test(s)) && !/LambaGesture\s*=/.test(code)) say(p + ": uses LambaGesture or Lamba.track.gestures but does not load ../../shell/sdk/gesture.js");
+      if ((/\bLambaFlip\b/.test(code) || /\bLamba\.hands\b/.test(code)) && !srcs.some(s => /(^|\/)shell\/sdk\/flip\.js$/.test(s)) && !/LambaFlip\s*=/.test(code)) say(p + ": uses LambaFlip or Lamba.hands but does not load ../../shell/sdk/flip.js");
+      if (/\bLambaShape\b/.test(code) && !srcs.some(s => /(^|\/)shell\/sdk\/shape\.js$/.test(s)) && !/LambaShape\s*=/.test(code)) say(p + ": uses LambaShape but does not load ../../shell/sdk/shape.js");
+      if ((/\bLambaFind\b/.test(code) || /\bLamba\.home\.findLights\b/.test(code)) && !srcs.some(s => /(^|\/)shell\/sdk\/find\.js$/.test(s)) && !/LambaFind\s*=/.test(code)) say(p + ": uses LambaFind or Lamba.home.findLights but does not load ../../shell/sdk/find.js (and shape.js before it)");
+      if (/\bLamba\.home\.findLights\b/.test(code) && isTv) say(p + ": Lamba.home.findLights is for the Host's phone page (it blinks the lights and watches the camera), not the screen page");
+      if (/\bLambaVision\s*\.\s*label\b/.test(code)) warningsLater.push(p + ": LambaVision.label runs a second engine and a model of 18 MB (about 400 MB more on the phone, one at a time): it is not for phones with little memory. LambaVision.glow and LambaVision.suggest need no model: try them first");
       if (/\bLambaUI\s*\.\s*(swipe|trace)\b/.test(code) && !srcs.some(s => /(^|\/)shell\/sdk\/ui\.js$/.test(s))) say(p + ": uses LambaUI.swipe or LambaUI.trace but does not load ../../shell/sdk/ui.js"); }
     // 5. a phone page never zooms
     if (p === screens.phone) { const vp = (html.match(/<meta[^>]+name=["']viewport["'][^>]*>/i) || [""])[0]; if (!/user-scalable\s*=\s*no/.test(vp)) say(p + ": the viewport needs user-scalable=no (phone pages never zoom)"); }
@@ -7396,7 +7458,6 @@ function checkFiles(o) {
     if (/LambaUI\.colours\b/.test(code)) say(f + ": LambaUI.colours is gone: give the colours setting swatches in lamba.json and put it in a group part (the drawer draws the shared colour strip and picker)");
     if (/(className|class)\s*=\s*["'][^"']*\b(swatch|swatches|colou?r-?(grid|dots?|picker|chips?)|dots?-?grid)\b/i.test(code) || /classList\.add\(\s*["'][^"']*(swatch|colou?r-?(grid|dots?|picker))/i.test(code)) say(f + ": a home-made colour grid or picker: use a colours or colour setting with swatches (the drawer draws the shared strip and picker)");
   }
-  const warningsLater = [];
   // 9. the phone's motion and camera: declared, on a phone page, and through Lamba (never the browser's own)
   const perms = Array.isArray(m.permissions) ? m.permissions : [], tvFiles = new Set([screens.tv, screens.picture].filter(Boolean));
   for (const t of [...tvFiles]) { const h = text(t); if (h !== null) scriptsOf(h).srcs.forEach(s => { const f = allowedRef(t, s) ? where(t, s) : null; if (f && f.indexOf("@sdk/") !== 0) tvFiles.add(f); }); }
@@ -7407,6 +7468,8 @@ function checkFiles(o) {
       if (!perms.includes(perm)) say(f + ": uses " + name + " but lamba.json permissions does not include \"" + perm + "\" (add it: the host asks the person)");
       if (tvFiles.has(f)) say(f + ": " + name + " is for the phone's pages (the screen has no " + (perm === "camera" ? "camera" : "motion sensors") + ")");
     }
+    if (/\bLamba\s*\.\s*record\b/.test(code) && !perms.includes("recording")) say(f + ": uses Lamba.record but lamba.json permissions does not include \"recording\" (add it: Lamba asks the person, shows a red dot on the screen while it records, and keeps nothing unless the person taps Record)");
+    if (/\bLamba\s*\.\s*record\b/.test(code) && tvFiles.has(f) && /\.\s*record\s*\.\s*(start|stop|key|event|slide)\s*\(/.test(code)) say(f + ": Lamba.record starts, stops and takes events on the phone's pages; the screen only gets Lamba's own red dot");
     for (const [use, name, phone] of [[/\bLamba\s*\.\s*mic\b|\b[A-Za-z_$][\w$]*\s*\.\s*mic\s*\.\s*(level|words|record|stop)\s*\(/, "Lamba.mic", true], [/\bLamba\s*\.\s*voice\b|\b[A-Za-z_$][\w$]*\s*\.\s*voice\s*\.\s*(play|live)\s*\(/, "Lamba.voice", false]]) {
       if (!use.test(code)) continue;
       if (!perms.includes("microphone")) say(f + ": uses " + name + " but lamba.json permissions does not include \"microphone\" (add it: Lamba asks the person)");
@@ -7421,10 +7484,20 @@ function checkFiles(o) {
       if (!perms.includes("ink")) say(f + ": uses Lamba.ink but lamba.json permissions does not include \"ink\" (add it: Lamba draws the pointers and the pen strokes)");
       if (!tvFiles.has(f)) say(f + ": Lamba.ink is for the screen page (the phone's own pad for pointing and drawing is Lamba's)");
     }
+    if (/\bLamba\s*\.\s*desktop\b|\b[A-Za-z_$][\w$]*\s*\.\s*desktop\s*\.\s*(can|pair|key|pinch|toPdf)\s*\(/.test(code)) {
+      if (!perms.includes("desktop")) say(f + ": uses Lamba.desktop but lamba.json permissions does not include \"desktop\" (add it: Lamba pairs the helper app and only the Host's computer can use it)");
+      if (tvFiles.has(f)) say(f + ": Lamba.desktop is for the Host's phone page on a computer (the screen never presses keys)");
+    }
     if (/\bLamba\s*\.\s*home\b|\b[A-Za-z_$][\w$]*\s*\.\s*home\s*\.\s*(ready|devices|choose|connect|allow|set|toggle|state)\s*\(/.test(code)) {
       if (m.home !== true) say(f + ": uses Lamba.home but lamba.json does not say \"home\": true (add it: Lamba's review checks why the app needs the Host's home)");
       if (/\.\s*home\s*\.\s*allow\s*\(/.test(code)) say(f + ": Lamba.home.allow does not exist: the Host picks the devices in Lamba's own picker, opened with Lamba.home.choose({ max }) on the Host's phone page");
+      if (tvFiles.has(f) && /\.\s*home\s*\.\s*controls\s*\(/.test(code)) say(f + ": Lamba.home.controls is for the Host's phone page (Lamba's own sheet opens there; the screen only switches the devices allowed)");
       if (tvFiles.has(f) && /\.\s*home\s*\.\s*choose\s*\(/.test(code)) say(f + ": Lamba.home.choose is for the Host's phone page (Lamba's picker opens there; the screen only switches the devices allowed)");
+    }
+    if (/\bLamba\s*\.\s*camera\b|\b[A-Za-z_$][\w$]*\s*\.\s*camera\s*\.\s*(source|onSource|choose|show|sources|onSources|use|add)\b/.test(code)) {   // the camera source (docs/sdk/SENSORS.md, "Camera sources")
+      if (m.cameraSource !== true) say(f + ": uses Lamba.camera but lamba.json does not say \"cameraSource\": true (add it: the Host picks the camera in Lamba's own sheet)");
+      const hostOnly = (code.match(/\.\s*camera\s*\.\s*(choose|use|add)\s*\(/) || [])[1];
+      if (tvFiles.has(f) && hostOnly) say(f + ": Lamba.camera." + hostOnly + " is for the Host's phone page (Lamba's sheet opens there; the screen follows the source and the layout)");
     }
     if (/\b(track|video)\s*\.\s*still\s*\(/.test(code)) {   // a still of the camera for marking: the Host's phone only, kept for drawing, never sent on
       if (tvFiles.has(f)) say(f + ": Lamba.track.still / Lamba.video.still is for the Host's phone page (a still of the camera never reaches the screen page)");
@@ -7432,6 +7505,7 @@ function checkFiles(o) {
       if (/\.\s*(send|set|change|stream)\s*\([^;]{0,200}\b(url|still|dataUrl|picture)\b/.test(code)) say(f + ": the camera still is passed on (Lamba.send, Lamba.store.set or Lamba.change): it is for drawing on the Host's phone only and never leaves it (Lamba drops such messages, and Lamba's review refuses the app)");
     }
     if (/\bgetUserMedia\b|\bmediaDevices\b|\bgetDisplayMedia\b/.test(code)) say(f + ": opens the camera or microphone itself (use Lamba.track or Lamba.mic: the host asks the person and the picture or sound stays on the phone)");
+    if (/\bMediaRecorder\b|\bgetUserMedia\s*\(\s*\{[^}]*\baudio\b/.test(code) && !/\bLamba\s*\.\s*record\b/.test(code)) warningsLater.push(f + ": records by itself (MediaRecorder or getUserMedia audio). Every app that records uses Lamba.record (add \"recording\" to permissions): Lamba draws Record, the 5-4-3-2-1 countdown on the phone and the screen, Pause / Resume and Stop, and the save step with the link (docs/sdk/DESIGN.md, \"Recording\")");
     if (/\b(webkit)?SpeechRecognition\b|\bMediaRecorder\b|\bcreateMediaStreamSource\b/.test(code)) say(f + ": listens to the microphone itself (use Lamba.mic: words, loudness or a voice message, and Lamba asks the person first)");
     if (/["'](devicemotion|deviceorientation|deviceorientationabsolute)["']|\b(DeviceMotionEvent|DeviceOrientationEvent)\b/.test(code)) say(f + ": reads the phone's sensors itself (use Lamba.motion: the host asks the person and calms the readings)");
   }
@@ -7447,6 +7521,8 @@ function checkFiles(o) {
   hostCameraView(m, say, warnings, text, scriptsOf, where, has);
   askNameRule(m, warnings, pages, text, scriptsOf, where, has);
   startRule(m, warnings, pages, text);
+  controlsRule(m, warnings, pages, text, scriptsOf, where, has);
+  sheetRule(m, warnings, pages, text, scriptsOf, where, has);
   // 16. phone pages use Lamba's controls (docs/sdk/UI.md)
   for (const p of pages.filter(x => x !== screens.tv && x !== screens.picture)) {
     const html = text(p); if (html === null) continue;
@@ -7461,6 +7537,7 @@ function checkFiles(o) {
   // 12. "TV" is not what an app calls the screen: an error in the listing, a warning in the pages
   tvWord(m, say, warnings, pages, text, scriptsOf);
   filmRule(m, has, text, say, warnings, where);
+  landscapeSheetRule(has, text, warnings);
   iconRule(m, has, text, warnings);
   // 17. how the screen runs on old screens (tools/sdk_perf.mjs): style or filter writes every frame, timers that redraw the
   //     scene, a film floor with no lighter copy, sound with no unlock. Warnings here; the review (docs/sdk/REVIEW.md) shows them as findings
@@ -7772,6 +7849,7 @@ async function checkUpload(bytes, o) {
   notes.push((m.permissions || []).length ? "Asks for: " + m.permissions.join(", ") : "Asks for nothing (no sound, camera, motion, microphone or country)");
   if ((m.permissions || []).includes("microphone")) { const mm = micModes({ paths: files.map(f => f.path), text }); notes.push("Microphone: " + (mm.length ? mm.join(", ") : "declared, but no use found")); }
   if ((m.permissions || []).includes("video")) notes.push("Video: shows a live camera or screen picture on the screen, only after a person taps Lamba's own button" + ((m.category === "kids" || (m.categories || []).includes("kids")) ? " (a kids app: Players' video is off until the Host turns it on)" : ""));
+  if ((m.permissions || []).includes("desktop")) notes.push("Desktop: on the Host's own computer, the free Lamba helper app moves Keynote and PowerPoint slides (next, previous, first, last) and saves a deck as a PDF, only after the Host pairs it; nothing else");
   if ((m.permissions || []).includes("ink")) notes.push("Ink: phones can point and draw over the screen with Lamba's own pad, and the Host can clear it");
   if (m.home === true) notes.push("Home: asks for the Host's smart home (Home Assistant): the Host ticks, in Lamba's own picker, up to 24 lights, switches, fans, blinds, media players or heating to allow, and the screen may only switch those on and off. Check the app says why, and that nothing switches by accident");
   notes.push((m.outside || []).length ? "Reaches outside Lamba: " + m.outside.join(", ") : "Reaches no address outside Lamba");
@@ -7806,7 +7884,7 @@ async function kitNotice(base) {
 // ---------- the command ----------
 // node lamba-check.mjs [folder ...]   with no folder: every folder here that has a lamba.json (or this one)
 // Each folder is checked as Lamba's server checks the zip you upload: the same code (above), on the same files.
-const RESERVED = ["admin","alarm","app","apps","aquarium","art","aura","balloons","bowling","cheetah","chess","clock","colour","control","countdown","developers","devs","draw","draw-along","fireplace","flip","gallery","graffiti","home","lamba","mini-golf","motion-lab","neon","now-playing","paper","photos","ping-pong","pool","quotes","registry","remote","sdk","sdk-air-touch","sdk-candles","sdk-draw","sdk-frames","sdk-hello","sdk-meeting-room","sdk-movecheck","sdk-party-pack","sdk-roommic","sdk-showme","shell","stopwatch","tictactoe","timers","tracking-lab","welcome","window","winter-window","write-along","x","youtube"];
+const RESERVED = ["admin","alarm","app","apps","aquarium","art","aura","balloons","bowling","cheetah","chess","clock","colour","control","countdown","developers","devs","draw","draw-along","fireplace","flip","gallery","graffiti","home","lamba","mini-golf","motion-lab","neon","now-playing","paper","photos","ping-pong","pool","quotes","registry","remote","sdk","sdk-air-slides","sdk-air-touch","sdk-candles","sdk-draw","sdk-frames","sdk-hello","sdk-meeting-room","sdk-movecheck","sdk-party-pack","sdk-roommic","sdk-showme","shell","stopwatch","tictactoe","timers","tracking-lab","welcome","window","winter-window","write-along","x","youtube"];
 const SKIP = n => n === "node_modules" || n.startsWith(".");   // .lamba/ (the key) is hidden, so never in a zip
 const SECRET = p => /(^|\/)\.lamba(\/|$)/.test(p);   // hidden files and folders stay out of an app's zip
 function walk(dir) {

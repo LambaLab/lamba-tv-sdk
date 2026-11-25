@@ -378,10 +378,12 @@
      "country",
      "microphone",
      "video",
-     "ink"
+     "ink",
+     "recording",
+     "desktop"
     ]
    },
-   "description": "What the app may ask for: sound, camera, motion, country, microphone, video, ink. \"camera\": the picture never leaves the phone (Lamba.track). \"video\": Lamba shows a live camera or screen picture on the screen (Lamba.video.live), only after a tap on Lamba's own button. \"ink\": Lamba draws phone pointers and pen strokes over the screen (Lamba.ink.live), with its own pad on the phones"
+   "description": "What the app may ask for: sound, camera, motion, country, microphone, video, ink, recording, desktop. \"camera\": the picture never leaves the phone (Lamba.track). \"video\": Lamba shows a live camera or screen picture on the screen (Lamba.video.live), only after a tap on Lamba's own button. \"ink\": Lamba draws phone pointers and pen strokes over the screen (Lamba.ink.live), with its own pad on the phones"
   },
   "outside": {
    "type": "array",
@@ -403,9 +405,17 @@
   "liveCard": {
    "type": "boolean"
   },
+  "hostPlays": {
+   "type": "boolean",
+   "description": "true: an app Players join where the Host plays too (a presenter, a player-host). Lamba keeps the app's phone page (view guest) running, out of sight, on the Host's phone: its Record key, hand pinch and anything else that page does for a Player work for the Host, while the Host keeps the copy of the screen, the tiles and the deck remote. The Host's messages are the Host's own (from \"owner\")."
+  },
   "hostCamera": {
    "type": "boolean",
    "description": "true: a camera app (Home Touch). The Host's main view is the app's own camera view (phone.html, view \"camera\": Lamba.track with Lamba.track.preview(el, { under: true })) in place of the copy of the screen, and Lamba shows that same camera live on the screen (Lamba.video, no Camera key) once the Host allows the camera. Needs permissions camera and video"
+  },
+  "cameraSource": {
+   "type": "boolean",
+   "description": "true: an Air Touch app that takes Lamba's camera source choice. The Host picks the camera in Lamba's own sheet (Lamba.camera.choose on the Host's phone): the Host's phone, a room camera device, the screen's own camera, or a Home Assistant camera; the app follows Lamba.camera.source (where \"phone\": Lamba.video as always; where \"screen\": Lamba.camera.show on the screen page). Needs \"camera\" and \"video\" in permissions"
   },
   "workspace": {
    "type": "boolean",

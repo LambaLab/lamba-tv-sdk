@@ -36,7 +36,7 @@ p { margin: 3vh 0 0; font-size: 4vh; opacity: .75; }
     var count = function () { var n = L.store.get("waves") || 0; line.textContent = n ? n + (n === 1 ? " wave so far" : " waves so far") : "Scan to wave from your phone"; };
     // the join card: big while nobody has joined, beside the words (avoid: where they are, in shares of the screen)
     var words = function () { var r = document.getElementById("words").getBoundingClientRect(), w = innerWidth || 1, h = innerHeight || 1; return [r.left / w, r.top / h, r.right / w, r.bottom / h]; };
-    var card = function () { if (L.screen.view === "screen") L.joinCard({ show: true, size: L.players.length ? "corner" : "full", line: "Scan to wave", avoid: words() }); };
+    var card = function () { if (L.hint) L.hint(L.players.length ? "" : "Players scan the code on it, or try as a player"); if (L.screen.view === "screen") L.joinCard({ show: true, size: L.players.length ? "corner" : "full", line: "Scan to wave", avoid: words() }); };
     L.onSettings(paint); L.onPlayers(card); L.store.on(count);
     // a half of a split screen (Lamba.layout): this page has the half's own tall shape, so the words get a little smaller
     var shape = function (l) { document.documentElement.classList.toggle("tall", !!(l && l.tall)); card(); };

@@ -55,7 +55,9 @@ download is the last resort, only if every way to connect fails, and then you ex
    To play it: the preview link ("Play it" below). On a machine with a browser, `node lamba-test.mjs <app> --serve` also works.
 9. **Clips.** The starter's clips are placeholders, and an upload with them is refused. Run
    `node lamba-clips.mjs <app>`: it plays the app in the simulator (random taps, or `--script steps.json` for a
-   session that shows it at its best) and writes 2 or 3 clips in the exact format, listed in lamba.json. Look at
+   session that shows it at its best; the script is a list of steps or `{ setup, steps, once }`, a step may carry `upload` or `text`;
+   `--main owner` records the Host's phone, `--name` and `--caption` record one clip, `--players` and `--host` name the people;
+   `--live scenario.mjs --base <local worker>` records against the real room, only inside Lamba's own repository) and writes 2 or 3 clips in the exact format, listed in lamba.json. Look at
    each `-poster.webp`, and write captions that say what each clip shows. Never draw, generate or reuse clips that
    don't show this app.
 10. **Assets, then look at them.** Make `icon.svg` (square; the drawing inside 9 to 51 of 60), `card.svg` (exactly

@@ -23,6 +23,13 @@
 // --script steps.json: a list played in a loop, for a session that shows the app at its best, e.g.
 //   [{ "phone": "g1", "tap": "#answer-2" }, { "wait": 900 }, { "phone": "g2", "tap": ".go" }, { "phone": "owner", "tap": "#next" }]
 //   phone: "g1", "g2", "g3" (Players) or "owner" (the Host); tap: a CSS selector on that phone's page; wait: milliseconds.
+//   Or an object { "setup": [steps run once before recording], "steps": [...], "once": true (play the steps once, then hold the last picture instead of looping) }.
+//   A step may also carry "upload": "path/to/file" (a file the tap's picker gets; the path is relative to where you run this) or "text": "typed into the tap's field".
+//   --main owner records the Host's phone (default: the first Player's).
+//   --name my-clip --caption "words" records ONE clip, clips/my-clip.mp4 with its poster, and leaves lamba.json alone. --players "Alex Morgan,Jamie Parker", --host "Taylor Brooks" and --guests 3 set the people.
+//   --live scenario.mjs --base http://127.0.0.1:8771  records against the real worker, the real screen page and the real Lamba remote (a local `wrangler dev`, Chrome, ffmpeg and Lamba's repository's tests/sdk-room.mjs),
+//   for what the simulator cannot show; scenario.mjs exports default async rig => { ...; await rig.record(async () => { ...the clip... }) } (see docs/sdk/ASSETS.md).
+//   A tap whose element is not on that phone right now is skipped at once, so list the keys of every part of the app (the lobby's Ready, each round's move).
 import { createServer } from "node:http";
 import { readFileSync, readdirSync, statSync, existsSync, mkdirSync, writeFileSync, rmSync, mkdtempSync, unlinkSync } from "node:fs";
 import { join, resolve, relative, basename, dirname, sep, extname } from "node:path";
@@ -39,8 +46,8 @@ const require = createRequire(join(HERE, "lamba-clips.mjs"));
 const PLACEHOLDERS = ["5bbbd22bc3f4b056ee767a62b8ec885c6766ba38d5e57b72da4918b33e459ce0","da6fe1d5a1acee53eb96995e6e9fd43f7a7e3f0de7ecbf6d0ed3627338e33287","13dc9b09054f1df551795c2eedb74307376ac0b115a174710f497c9a9cab69f2","f58064faa1a5f2806878f48c785d194532ac89c824b04feec76673bf8d65ef05"];
 const args = process.argv.slice(2), flag = f => args.includes(f);
 const opt = k => { const i = args.indexOf(k); return i > -1 ? args[i + 1] : null; };
-const HEADED = flag("--headed"), SECONDS = Math.max(6, Math.min(14, +opt("--seconds") || 10)), SCRIPT = opt("--script");
-const named = args.filter((a, i) => !a.startsWith("-") && !["--seconds", "--script"].includes(args[i - 1]));
+const MAIN = opt("--main"), ONE = opt("--name"), ONECAP = opt("--caption"), HEADED = flag("--headed"), SECONDS = Math.max(6, Math.min(14, +opt("--seconds") || 10)), SCRIPT = opt("--script");
+const named = args.filter((a, i) => !a.startsWith("-") && !["--seconds", "--script", "--main", "--name", "--caption", "--kinds", "--players", "--host", "--guests", "--live", "--base"].includes(args[i - 1]));
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const say = (...a) => console.log(...a);
 const W = 540, H = 920, BG = "0x141416", FPS = 30;
@@ -124,7 +131,18 @@ async function realSize(p) {
 const glass = rig => 'figure.sim-phone[data-rig="' + rig + '"] .sim-glass';
 
 // one tap on a phone: a step of the script, else something on screen chosen at random (bigger things more often)
-async function tapRandom(f) {
+// a phone not in the picture has no layout (the simulator shows one phone at a time), so it is pressed from inside its page:
+// shown = no hidden attribute, display or visibility on the element or its parents, not disabled; then el.click()
+// (sel: a CSS selector, or "*" for a random key that is shown; no eval, the sealed pages forbid it)
+const PRESS_UNSEEN = sel => {
+  const shown = e => { if (!e || e.disabled) return false; for (let x = e; x && x.nodeType === 1; x = x.parentElement) { const st = getComputedStyle(x); if (x.hidden || x.getAttribute("aria-hidden") === "true" || st.display === "none" || st.visibility === "hidden") return false; } return true; };
+  const e = sel === "*" ? (l => l[Math.floor(Math.random() * l.length)])([...document.querySelectorAll("button, [role=button], [data-tap]")].filter(shown)) : document.querySelector(sel);
+  if (!shown(e)) return false;
+  const o = { bubbles: true, cancelable: true, pointerId: 1, pointerType: "touch", isPrimary: true, button: 0 };   // as a finger does: down, up, then the click
+  e.dispatchEvent(new PointerEvent("pointerdown", o)); e.dispatchEvent(new PointerEvent("pointerup", o)); e.click(); return true; };
+const PRESSED = {};   // presses on each phone, said at the end, so a script that matched nothing (or a Player never pressed) shows
+async function tapRandom(f, shown = true, who = "") {
+  if (!shown) { if (await f.evaluate(PRESS_UNSEEN, "*").catch(() => false)) PRESSED[who] = (PRESSED[who] || 0) + 1; return; }
   const t = await f.evaluate(() => {
     const ok = el => { const r = el.getBoundingClientRect(), s = getComputedStyle(el); return r.width >= 24 && r.height >= 24 && r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth && s.visibility !== "hidden" && s.pointerEvents !== "none" && !el.disabled && !el.closest("[hidden],[aria-hidden=true]"); };
     const all = [...document.querySelectorAll("button, [role=button], input[type=range], canvas, [data-tap]")].filter(ok);
@@ -136,20 +154,43 @@ async function tapRandom(f) {
     el.setAttribute("data-lamba-clips", "1"); const r = el.getBoundingClientRect();
     return { canvas: el.tagName === "CANVAS", w: r.width, h: r.height };
   }).catch(() => null);
-  if (!t || t.done) return;
+  if (!t) return;
+  PRESSED[who] = (PRESSED[who] || 0) + 1; if (t.done) return;
   const position = t.canvas ? { x: t.w * (0.2 + Math.random() * 0.6), y: t.h * (0.2 + Math.random() * 0.6) } : undefined;
   await f.click("[data-lamba-clips]", { force: true, timeout: 1500, position }).catch(() => {});
   await f.evaluate(() => { const e = document.querySelector("[data-lamba-clips]"); if (e) e.removeAttribute("data-lamba-clips"); }).catch(() => {});
 }
 // play for ms: the script's steps in a loop, else a tap every second or so, on each player's phone in turn (the phone
 // in the picture more often)
-async function play(phones, main, steps, ms) {
+let PAGE = null;   // the simulator's page (file pickers open on it)
+async function pressStep(phones, main, s) {   // one step with a tap; true when pressed
+  const who = s.phone || main, f = phones[who]; if (!f || !s.tap) return false;
+  if (s.upload) PAGE.once("filechooser", fc => fc.setFiles(resolve(s.upload)).catch(() => {}));
+  if (who === main) { if (!await f.isVisible(s.tap).catch(() => false) || !await f.click(s.tap, { force: true, timeout: 1500 }).then(() => true, () => false)) return false; }
+  else if (!await f.evaluate(PRESS_UNSEEN, s.tap).catch(() => false)) return false;
+  if (s.text) await f.fill(s.tap, s.text).catch(() => {});
+  PRESSED[who] = (PRESSED[who] || 0) + 1; return true;
+}
+async function setup(phones, main, list) {
+  for (const s of list || []) {
+    if (s.wait) { await wait(+s.wait); continue; }
+    if (s.tvdump) { const f = await sealed(PAGE, "tv", "screen", 2000); say("tv: " + await f.evaluate(() => document.body.className + " | html=" + document.documentElement.className + " | idle=" + getComputedStyle(document.getElementById("idle")).display + " | bg=" + getComputedStyle(document.body).backgroundColor + " | " + document.body.innerText.slice(0, 80).replace(/\n/g, " / ")).catch(e => String(e))); continue; }
+    if (s.dump) { const f = phones[s.phone || main]; say("dump " + (s.phone || main) + ":\n" + (await f.evaluate(() => [...document.querySelectorAll("button,[role=button],input")].filter(e => e.getClientRects().length).map(e => e.tagName + " " + (e.className || "") + " " + [...e.attributes].filter(a => /^data-|aria-label|id|type/.test(a.name)).map(a => a.name + "=" + a.value).join(" ") + " | " + (e.textContent || "").trim().slice(0, 30)).join("\n")).catch(e => String(e)))); continue; }
+    const end = Date.now() + (+s.within || 15000);   // keep trying until the key is there
+    while (!await pressStep(phones, main, s) && Date.now() < end) await wait(300);
+  }
+}
+async function play(phones, main, steps, ms, once) {
   const end = Date.now() + ms;
+  if (steps && once) { for (const s of steps) { if (s.wait) await wait(+s.wait); else { await pressStep(phones, main, s); await wait(250); } } await wait(Math.max(0, end - Date.now())); return; }
   if (steps) {
     for (let i = 0; Date.now() < end; i = (i + 1) % steps.length) {
       const s = steps[i];
       if (s.wait) { await wait(Math.min(+s.wait || 0, end - Date.now())); continue; }
-      const f = phones[s.phone || main]; if (f && s.tap) await f.click(s.tap, { force: true, timeout: 1500 }).catch(() => {});
+      const who = s.phone || main, f = phones[who]; if (!f || !s.tap) { await wait(100); continue; }   // a key not on that phone now is skipped at once, so one script covers every screen of the app
+      if (who === main) { if (!await f.isVisible(s.tap).catch(() => false) || !await f.click(s.tap, { force: true, timeout: 1500 }).then(() => true, () => false)) { await wait(100); continue; } }
+      else if (!await f.evaluate(PRESS_UNSEEN, s.tap).catch(() => false)) { await wait(100); continue; }
+      PRESSED[who] = (PRESSED[who] || 0) + 1;   // the other Players' phones are not in the picture: pressed from inside their page
       await wait(250);
     }
     return;
@@ -157,7 +198,7 @@ async function play(phones, main, steps, ms) {
   const order = Object.keys(phones); let k = 0;
   while (Date.now() < end) {
     const who = Math.random() < 0.55 ? main : order[k++ % order.length];
-    if (phones[who]) await tapRandom(phones[who]);
+    if (phones[who]) await tapRandom(phones[who], who === main, who);
     await wait(Math.min(700 + Math.random() * 700, Math.max(0, end - Date.now())));
   }
 }
@@ -183,38 +224,99 @@ const BIG = "(function(){if(window!==top||!/\\/devs\\/simulator\\//.test(locatio
 
 // the clips show the app's own picture, so the copy the simulator plays has no frame or mat (lamba.json "frame": "none"; the file on disk is not changed)
 const noFrame = buf => { try { const m = JSON.parse(buf.toString("utf8")); m.frame = "none"; return Buffer.from(JSON.stringify(m)); } catch (e) { return buf; } };
+
+// ---------- live mode: the real worker, the real screen page and the real Lamba remote (for apps the simulator cannot show yet, like a deck) ----------
+//   node lamba-clips.mjs apps/my-app --live scenario.mjs --base http://127.0.0.1:8771 --name my-clip --caption "..." --seconds 10
+// The worker is a local preview (wrangler dev). scenario.mjs exports default async rig => { ... await rig.record(async () => { ...what the clip shows... }) }.
+// rig: wait(ms), host (the Host's remote: page, app() = the app's frame on it), players [{ name, page, app() }], tv (the screen page, tvApp() its app frame),
+//      setting(obj), add({ name, ... }) a Player, shot(file) a picture of the stage, record(fn).
+async function recordLive(dir, browser, tmp) {
+  const BASE = (opt("--base") || "http://127.0.0.1:8771").replace(/\/$/, ""), TVBASE = BASE.replace("127.0.0.1", "localhost");
+  process.env.BASE = BASE;
+  const m = JSON.parse(readFileSync(join(dir, "lamba.json"), "utf8")), id = m.id || basename(dir);
+  const R = await import(new URL("../tests/sdk-room.mjs", import.meta.url).href), { sock, rid, secret } = R;
+  const scenario = (await import(resolve(opt("--live")))).default;
+  const rm = rid(), key = secret(), code = secret(), nameOf = opt("--host") || "Alex Morgan";
+  const tvs = sock("/link/" + rm + "?role=tv&key=" + key); await tvs.opened; await tvs.first("show");
+  tvs.send({ t: "power", on: true }); tvs.send({ t: "setup", code }); await wait(150);
+  const own = sock("/link/" + rm + "?role=phone&code=" + code + "&lamba=dev:alice&d=" + "d".repeat(22)), welcome = await own.first("welcome", 7000); const hostKey = welcome && welcome.key; if (process.env.CLIPS_DEBUG) say("welcome " + JSON.stringify(welcome).slice(0, 200));
+  const setting = async v => { own.send({ t: "set", app: id, s: v }); await wait(500); };
+  await setting({}); own.send({ t: "app", app: id }); await wait(300); tvs.ws.close();
+  // two real pages, as a screen and a phone are: the screen (1600 x 900) and the Host's phone (390 x 844, twice as sharp), each recorded on its own and laid out together in cut()
+  const PHONE = Object.assign({}, require("playwright").devices["iPhone 13"], { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
+  const errors = [], tvCtx = await browser.newContext({ viewport: { width: 1600, height: 900 }, deviceScaleFactor: 1 }), tvPage = await tvCtx.newPage(), hostCtx = await browser.newContext(PHONE), p = await hostCtx.newPage();
+  const tmpT = join(tmp, "t"), tmpP = join(tmp, "p"); mkdirSync(tmpT); mkdirSync(tmpP);
+  const camT = camera(tvPage, await tvCtx.newCDPSession(tvPage), tmpT), camP = camera(p, await hostCtx.newCDPSession(p), tmpP);
+  tvPage.on("pageerror", e => errors.push("screen: " + e.message)); p.on("pageerror", e => errors.push("host: " + e.message));
+  await tvPage.goto(BASE + "/?tv=0"); await tvPage.evaluate(([i, k]) => { localStorage.clear(); localStorage.setItem("lf-screen", JSON.stringify({ id: i, key: k })); localStorage.setItem("lf-device", "tv"); localStorage.setItem("lf-paired", "1"); localStorage.setItem("lf-on", "1"); }, [rm, key]);
+  await tvPage.goto(BASE + "/?tv=1"); await wait(3500);
+  await tvPage.evaluate(() => { for (const i of ["fsHint", "tvmNote"]) { const h = document.getElementById(i); if (h) h.style.display = "none"; } document.documentElement.style.cursor = "none"; });
+  await p.goto(BASE + "/remote/login");
+  await p.evaluate(([i, k, n]) => { localStorage.setItem("lf-lamba", JSON.stringify({ token: "dev:alice", until: Date.now() + 36e5, user: { email: "alice@test.local", name: n } })); localStorage.setItem("lf-key-" + i, k); localStorage.setItem("lf-screens", JSON.stringify([{ id: i, name: "Living room" }])); localStorage.setItem("lf-current", i); }, [rm, hostKey, nameOf]);
+  await p.goto(BASE + "/remote/?pair=" + rm + "&open=" + id); await wait(2500);
+  const hostApp = () => p.frames().find(f => /\/remote\/app\?app=/.test(f.url())), tvApp = () => tvPage.frames().find(f => new RegExp(id + "/tv\\.html").test(f.url()));
+  const players = [];
+  const rig = {
+    page: p, tvPage, id, wait, own, setting, hostApp, tvApp, host: { page: p, app: hostApp }, players, errors,
+    async until(fn, ms = 15000) { const end = Date.now() + ms; while (Date.now() < end) { const v = await Promise.resolve().then(fn).catch(() => null); if (v) return v; await wait(150); } return null; },
+    async add(name) {
+      let v = null; for (let i = 0; i < 3 && !v; i++) { own.send({ t: "vinvite" }); v = await own.first("vinvite", 10000); }
+      const c = await browser.newContext(PHONE), pg = await c.newPage();
+      pg.on("pageerror", e => errors.push(name + ": " + e.message));
+      await pg.goto(BASE + "/remote/login"); await pg.evaluate(nm => localStorage.setItem("lf-me", nm), name);
+      await pg.goto(BASE + "/?visit=" + rm + "&inv=" + v.code);
+      const b = pg.getByText("That's me"); if (await b.waitFor({ timeout: 6000 }).then(() => 1, () => 0)) await b.click().catch(() => {});
+      const pl = { name, page: pg, app: () => pg.frames().find(f => /\/remote\/app\?app=/.test(f.url())) || pg.mainFrame() }; players.push(pl); return pl;
+    },
+    async shot(file, which) { await (which === "tv" ? tvPage : p).screenshot({ path: file }); },
+    async record(fn) {
+      const t0 = await camT.start(), p0 = await camP.start(), from = Math.max(t0, p0);
+      await fn(); const rest = from + SECONDS + 0.5 - Date.now() / 1000; if (rest > 0) await wait(rest * 1000);
+      rig.window = { kind: "play", from, to: Date.now() / 1000, frames: await camT.stop(), pframes: await camP.stop(), tv: { x: 0, y: 0, w: 1600, h: 900 }, ph: { x: 0, y: 0, w: 390, h: 844 }, tvScale: 1 };
+    }
+  };
+  await scenario(rig);
+  await tvCtx.close(); await hostCtx.close();
+  if (!rig.window) throw new Error("the scenario never called rig.record");
+  return { id, m, windows: [rig.window], errors };
+}
 async function record(dir, base, browser, tmp) {
   const m = JSON.parse(readFileSync(join(dir, "lamba.json"), "utf8")), id = m.id || basename(dir);
-  const pl = m.players || {}, guestsN = m.guests ? Math.max(1, Math.min(3, pl.max || 1, Math.max(2, pl.min || 1))) : 0;
-  const steps = SCRIPT ? JSON.parse(readFileSync(resolve(SCRIPT), "utf8")) : null;
+  const pl = m.players || {}, guestsN = opt("--guests") ? Math.max(1, Math.min(5, +opt("--guests"))) : m.guests ? Math.max(1, Math.min(3, pl.max || 1, Math.max(2, pl.min || 1))) : 0;
+  const who = (opt("--players") ? "&players=" + encodeURIComponent(opt("--players")) : "") + (opt("--host") ? "&host=" + encodeURIComponent(opt("--host")) : "");   // the people's names
+  const sc0 = SCRIPT ? JSON.parse(readFileSync(resolve(SCRIPT), "utf8")) : null, steps = sc0 && !Array.isArray(sc0) ? sc0.steps : sc0, once = !!(sc0 && sc0.once), setupSteps = sc0 && sc0.setup;
   if (steps && (!Array.isArray(steps) || !steps.length)) throw new Error("--script: a list of steps, like [{ \"phone\": \"g1\", \"tap\": \"#go\" }, { \"wait\": 800 }]");
   const ctx = await browser.newContext({ viewport: { width: 1600, height: 1700 }, deviceScaleFactor: 1 });
   await ctx.addInitScript(BIG);
-  const p = await ctx.newPage(), cam = camera(p, await ctx.newCDPSession(p), tmp);
+  const p = await ctx.newPage(); PAGE = p; const cam = camera(p, await ctx.newCDPSession(p), tmp);
   const errors = []; p.on("pageerror", e => errors.push(e.message));
-  await p.goto(base + "/devs/simulator/" + (guestsN ? "?guests=" + guestsN + "&join=skip" : ""));   // (join=skip: the Players are in the app at once, not on Lamba's join steps)
+  await p.goto(base + "/devs/simulator/" + (guestsN ? "?guests=" + guestsN + "&join=skip" + who : ""));   // (join=skip: the Players are in the app at once, not on Lamba's join steps)
   await p.waitForSelector("#zipBtn", { timeout: 15000 });
   await p.setInputFiles("#zipInput", { name: id + ".zip", mimeType: "application/zip", buffer: zipOf(dir, id + "/", noFrame) });
   if (!await sealed(p, "tv", "screen", 15000)) throw new Error("the screen page never said hello: run node lamba-test.mjs " + basename(dir) + " and fix what it says first");
   const rigs = guestsN ? Array.from({ length: guestsN }, (x, i) => "g" + (i + 1)) : ["owner"], phones = {};
   for (const r of rigs) phones[r] = await sealed(p, r, r === "owner" ? "controller" : "guest", 10000);
-  if (guestsN) phones.owner = await sealed(p, "owner", "controller", 4000);
-  const main = rigs[0];
+  if (guestsN) phones.owner = await sealed(p, "owner", "controller", MAIN === "owner" ? 500 : 4000);
+  const main = MAIN || rigs[0];
+  if (MAIN === "owner") phones.owner = rigFrame(p, "owner") || phones.owner;   // the Host: the real Lamba remote page itself (its drawer and keys), not the app page inside it
+
+  if (!phones[main] && process.env.CLIPS_DEBUG) { for (const fr of p.frames()) say("frame " + fr.url().slice(0, 110) + " parent=" + (fr.parentFrame() ? fr.parentFrame().url().slice(0, 80) : "-") + " view=" + await fr.evaluate(() => window.Lamba && Lamba.screen && Lamba.screen.view).catch(() => "?")); }
   if (!phones[main]) throw new Error("the phone page never said hello on " + (guestsN ? "a Player's phone" : "the Host's phone"));
   const top = async () => { await p.evaluate(() => { const s = document.getElementById("stage"); if (s) scrollTo(0, s.getBoundingClientRect().top + scrollY); }); await wait(1500); };
   await showRig(p, main); await realSize(p); await top();
+  await showRig(p, main); if (setupSteps) await setup(phones, main, setupSteps);
   const windows = [];
   // the screen and a phone, then the same phone big
-  for (const kind of ["play", "phone"]) {
+  for (const kind of (ONE ? "play" : opt("--kinds") || "play,phone").split(",")) {
     await showRig(p, main); const tv = await box(p, "#tvScreen"), ph = await box(p, glass(main));
     if (!tv || !ph) throw new Error("the simulator's screen or phone is not on screen");
-    const from = await cam.start(); await play(phones, main, steps, SECONDS * 1000 + 500);
+    const from = await cam.start(); await play(phones, main, steps, SECONDS * 1000 + 500, once);
     windows.push({ kind, from, to: Date.now() / 1000, frames: await cam.stop(), tv, ph });
   }
   // settings of its own: the Host's drawer open at the first setting with pictures to choose, each choice sent to the screen
   const fields = (m.settings || {}).fields || {}, pick = q => q && q.setting && ["choice", "switch", "colour"].includes((fields[q.setting] || {}).type);
   const g = ((m.settings || {}).groups || []).find(x => x && x.key && Array.isArray(x.parts) && x.parts.some(pick));
-  if (g) {
+  if (g && !ONE) {
     const part = g.parts.find(pick);
     await p.goto(base + "/devs/simulator/?app=local" + (guestsN ? "&guests=" + guestsN + "&join=skip" : "") + "&g=" + encodeURIComponent(g.key) + "&p=" + encodeURIComponent(part.setting));
     const host = await (async () => { const end = Date.now() + 10000; while (Date.now() < end) { const f = rigFrame(p, "owner"); if (f && await f.$(".ctl-strip button").catch(() => null)) return f; await wait(200); } return null; })();
@@ -228,7 +330,7 @@ async function record(dir, base, browser, tmp) {
         await host.evaluate(i => { const b = document.querySelectorAll(".ctl-strip button")[i]; if (b) { b.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" }); b.click(); } }, i % n).catch(() => {});
         await wait(700);
         await host.evaluate(() => { const s = [...document.querySelectorAll("button")].find(b => /^Send to /i.test(b.textContent) && b.offsetWidth > 0 && !b.disabled); if (s) s.click(); }).catch(() => {});
-        if (guestsN && !steps && phones[main]) await tapRandom(phones[main]);
+        if (guestsN && !steps && phones[main]) await tapRandom(phones[main], false, main);   // (the Host's phone is the one in the picture here)
         await wait(Math.min(1500, Math.max(0, end - Date.now())));
       }
       windows.push({ kind: "settings", from, to: Date.now() / 1000, frames: await cam.stop(), tv, ph });
@@ -244,7 +346,7 @@ const even = n => Math.max(2, Math.round(n / 2) * 2);
 async function pngs(browser, pw, ph, tmp) {
   const pg = await browser.newPage();
   const r = Math.round(pw * 0.11), pad = 48, bz = 7;   // a phone's corner: 11% of its width, and a slim dark bezel (7 px) around the glass
-  const out = await pg.evaluate(({ pw, ph, r, pad }) => {
+  const out = await pg.evaluate(({ pw, ph, r, pad, bz }) => {
     const rr = (x, y, w, h, c) => { c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); };
     const m = document.createElement("canvas"); m.width = pw; m.height = ph; const mc = m.getContext("2d"); mc.fillStyle = "#000"; mc.fillRect(0, 0, pw, ph); mc.fillStyle = "#fff"; rr(0, 0, pw, ph, mc); mc.fill();
     const s = document.createElement("canvas"); s.width = pw + 2 * pad; s.height = ph + 2 * pad; const sc = s.getContext("2d"); sc.filter = "blur(16px)"; sc.fillStyle = "rgba(0,0,0,.55)"; rr(pad, pad, pw, ph, sc); sc.fill();
@@ -279,12 +381,15 @@ async function groundPng(browser, tint, caption, tmp, side) {
 }
 async function cut(browser, w, out, tmp, m) {
   // the frames as they came, each shown until the next one (ffmpeg's concat list)
-  const fr = w.frames.filter(f => f.t >= w.from - 0.05);
-  if (!fr.length) throw new Error("no picture was recorded");
-  const list = join(tmp, "list-" + w.kind + ".txt"), L = [];
-  fr.forEach((f, i) => { L.push("file '" + f.file.replace(/'/g, "'\\''") + "'"); L.push("duration " + Math.max(0.001, ((i + 1 < fr.length ? fr[i + 1].t : Math.max(w.to, f.t + 0.04)) - f.t)).toFixed(4)); });
-  L.push("file '" + fr[fr.length - 1].file.replace(/'/g, "'\\''") + "'");
-  writeFileSync(list, L.join("\n") + "\n");
+  const concatOf = (frames, name) => {
+    const fr = frames.filter(f => f.t >= w.from - 0.05).map((f, i) => i ? f : { file: f.file, t: Math.min(f.t, w.from) });   // (each picture shown until the next one; both pages start together)
+    if (!fr.length) throw new Error("no picture was recorded");
+    const list = join(tmp, name), L = [];
+    fr.forEach((f, i) => { L.push("file '" + f.file.replace(/'/g, "'\\''") + "'"); L.push("duration " + Math.max(0.001, ((i + 1 < fr.length ? fr[i + 1].t : Math.max(w.to, f.t + 0.04)) - f.t)).toFixed(4)); });
+    L.push("file '" + fr[fr.length - 1].file.replace(/'/g, "'\\''") + "'");
+    writeFileSync(list, L.join("\n") + "\n"); return list;
+  };
+  const list = concatOf(w.frames, "list-" + w.kind + ".txt"), plist = w.pframes ? concatOf(w.pframes, "plist-" + w.kind + ".txt") : null, PV = plist ? "[5:v]" : "[0:v]";
   // exact boxes, no bezel and no page around them: the phone is 390 x 844 (its own glass), the screen is its picture
   const crop = (b, e = 1) => "crop=" + (Math.floor(b.w) - 2 * e) + ":" + (Math.floor(b.h) - 2 * e) + ":" + (Math.ceil(b.x) + e) + ":" + (Math.ceil(b.y) + e);   // inside the box: one pixel for the phone, 4 for the screen (its corners are rounded 12 px, and the page shows white behind a rounded corner)
   const tint = /^#[0-9a-fA-F]{6}$/.test((m || {}).tint || "") ? m.tint : "#3a3d48";
@@ -295,17 +400,17 @@ async function cut(browser, w, out, tmp, m) {
     base = "[3:v]null[base]";
   } else {   // the WHOLE screen picture (16:9, never cropped) edge to edge across the top; the phone at a natural size over its lower right by a fifth of its height, clear of the centre
     const th = even(W * 9 / 16);
-    pw = 250; ph = even(pw * w.ph.h / w.ph.w); x = W - pw - 12; y = th - Math.round(ph * 0.2);
-    ground = await groundPng(browser, tint, CAPTION[w.kind] || "", tmp, { x: 22, y: Math.round((th + H) / 2) + 20, w: x - 22 - 16 });
+    pw = 250; ph = even(pw * w.ph.h / w.ph.w); x = W - pw - 12; y = w.pframes ? th + 22 : th - Math.round(ph * 0.2);   // (a live recording keeps the whole phone clear of the screen)
+    ground = await groundPng(browser, tint, (ONECAP && w.kind === "play" ? ONECAP : CAPTION[w.kind]) || "", tmp, { x: 22, y: Math.round((th + H) / 2) + 20, w: x - 22 - 16 });
     base = "[0:v]fps=" + FPS + "," + crop(w.tv, 4) + ",scale=" + W + ":" + th + ":flags=lanczos,setsar=1,format=yuv420p[sc];[3:v][sc]overlay=0:0[base]";
   }
   const g = await pngs(browser, pw, ph, tmp), pad = g.pad;
-  const filter = base + ";[0:v]fps=" + FPS + "," + crop(w.ph) + ",scale=" + pw + ":" + ph + ":flags=lanczos,setsar=1,format=yuva420p[p0];"
+  const filter = base + ";" + PV + "fps=" + FPS + "," + crop(w.ph) + ",scale=" + pw + ":" + ph + ":flags=lanczos,setsar=1,format=yuva420p[p0];"
     + "[1:v]scale=" + pw + ":" + ph + ",format=gray[m];[p0][m]alphamerge[phone];"
     + "[base][2:v]overlay=" + (x - pad) + ":" + (y - pad + 12) + ":format=auto[b2];[b2][phone]overlay=" + x + ":" + y + ":format=auto[b3];[b3][4:v]overlay=" + (x - g.bz) + ":" + (y - g.bz) + ":format=auto,format=yuv420p[v]";
   execFileSync(FF, ["-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", list, "-loop", "1", "-framerate", String(FPS), "-i", g.mask, "-loop", "1", "-framerate", String(FPS), "-i", g.shadow,
     "-loop", "1", "-framerate", String(FPS), "-i", ground, "-loop", "1", "-framerate", String(FPS), "-i", g.bezel,
-    "-filter_complex", filter, "-map", "[v]", "-t", String(SECONDS), "-r", String(FPS),
+    ...(plist ? ["-f", "concat", "-safe", "0", "-i", plist] : []), "-filter_complex", filter, "-map", "[v]", "-t", String(SECONDS), "-r", String(FPS),
     "-c:v", "libx264", "-profile:v", "high", "-pix_fmt", "yuv420p", "-crf", "23", "-preset", "slow", "-an", "-movflags", "+faststart", out]);
 }
 // the poster: the clip's first frame, as webp (Chromium writes it)
@@ -341,21 +446,22 @@ if (!existsSync(join(dir, "lamba.json"))) { say("lamba clips: " + dir + " has no
 const tmp = mkdtempSync(join(tmpdir(), "lamba-clips-"));
 const server = await serve(), base = "http://127.0.0.1:" + server.address().port;
 let browser;
-try { browser = await chromium.launch({ headless: !HEADED, args: ["--mute-audio"] }); }
+try { browser = await chromium.launch({ headless: !HEADED, args: ["--mute-audio", "--autoplay-policy=no-user-gesture-required"], ...(opt("--live") ? { channel: "chrome", args: ["--mute-audio", "--autoplay-policy=no-user-gesture-required", "--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream", "--disable-features=LocalNetworkAccessChecks,LocalNetworkAccessChecksWebSockets,BlockInsecurePrivateNetworkRequests,PrivateNetworkAccessSendPreflights"] } : {}) }); }
 catch (e) { say("lamba clips: Chromium is not installed for Playwright. Run: npx playwright install chromium"); server.close(); process.exit(2); }
 let R;
-try { say("lamba clips: recording " + basename(dir) + " in the simulator (about " + Math.round(SECONDS * 3 + 15) + " s)"); R = await record(dir, base, browser, tmp); }
+try { say("lamba clips: recording " + basename(dir) + (opt("--live") ? " live" : " in the simulator (about " + Math.round(SECONDS * 3 + 15) + " s)")); R = opt("--live") ? await recordLive(dir, browser, tmp) : await record(dir, base, browser, tmp); }
 catch (e) { say("lamba clips: stopped: " + (e && e.message ? e.message.split("\n")[0] : e)); await browser.close(); server.close(); rmSync(tmp, { recursive: true, force: true }); process.exit(1); }
 mkdirSync(join(dir, "clips"), { recursive: true });
 const made = [];
 try {
   for (const w of R.windows) {
-    const name = R.id + "-" + w.kind, mp4 = join(dir, "clips", name + ".mp4"), webp = join(dir, "clips", name + "-poster.webp");
+    const name = ONE || R.id + "-" + w.kind, mp4 = join(dir, "clips", name + ".mp4"), webp = join(dir, "clips", name + "-poster.webp");
     await cut(browser, w, mp4, tmp, R.m); await poster(browser, mp4, webp);
-    made.push({ name, mp4, webp, caption: CAPTION[w.kind] });
+    made.push({ name, mp4, webp, caption: ONECAP || CAPTION[w.kind] });
   }
 } catch (e) { say("lamba clips: making the clips stopped: " + String(e && (e.stderr && String(e.stderr).trim().split("\n").pop() || e.message) || e).split("\n")[0]); }
 await browser.close(); server.close(); rmSync(tmp, { recursive: true, force: true });
+if (ONE) { for (const x of made) say("wrote " + x.mp4); process.exit(0); }
 if (made.length < 2) { say("lamba clips: fewer than 2 clips were made, so lamba.json is as it was. Run it again, or with --headed to watch."); process.exit(1); }
 // the starter's placeholders out (Lamba refuses an upload with them), and the clips listed before that are not these kept after them
 const sha = f => createHash("sha256").update(readFileSync(f)).digest("hex"), removed = [];
@@ -366,5 +472,6 @@ say("\nWritten in " + relative(process.cwd(), join(dir, "clips")) + ", each 540 
 for (const x of made) say("  " + relative(process.cwd(), x.mp4) + " (" + Math.round(statSync(x.mp4).size / 1024) + " KB) and " + basename(x.webp));
 if (removed.length) say("Removed the starter's placeholders: " + removed.join(", "));
 if (kept.length) say("Kept your own clips after these: " + kept.map(c => c[0]).join(", "));
+{ const k = Object.keys(PRESSED).sort(); say("Presses while recording: " + (k.length ? k.map(x => (x === "owner" ? "the Host " : "Player " + x.slice(1) + " ") + PRESSED[x]).join(", ") : "none (check the selectors in --script)")); }
 if (R.errors.length) say("Errors in a page while recording (run node lamba-test.mjs): " + [...new Set(R.errors)].slice(0, 3).join(" | "));
 say("Next: look at each -poster.webp, and write captions in lamba.json \"clips\" that say what each clip shows (60 letters at most).");
