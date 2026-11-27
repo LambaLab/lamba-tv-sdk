@@ -9,14 +9,19 @@
 //   2. plays a short session on the phones: the taps in --script, else random taps on their buttons, the bigger ones
 //      more often, and records it
 //   (the app is recorded with no frame or mat, so the clips show its own picture)
-//   3. writes, in the exact format an app page wants (540 x 920, H.264, <seconds> s, no sound, each with its
+//   3. writes six or more clips, one for each part of the room (the app page shows them in a row, grouped by who they show),
+//      in the exact format an app page wants (540 x 920, H.264, <seconds> s, no sound, each with its
 //      -poster.webp, the clip's first frame). The phone is the real Lamba remote (the preview, the sheet and its tiles), captured at
 //      exactly 390 x 844 and cut to its own rounded glass, never a page around it, so there are no white edges; the screen is its
 //      picture edge to edge:
-//        clips/<id>-play.mp4       the whole screen picture (16:9, never cropped) edge to edge across the top, a phone at a natural size over its lower right, the
-//                                  caption in the free space, all on a soft gradient of the app's tint (lamba.json "tint")
-//        clips/<id>-phone.mp4      the phone, big, on that gradient
-//        clips/<id>-settings.mp4   an app with settings of its own: the Host chooses, the screen changes
+//        clips/<id>-start.mp4      role together: the room as the app starts (the whole screen picture, 16:9, never cropped, with a phone over its lower right)
+//        clips/<id>-screen.mp4     role screen: the whole screen picture, full frame, on a soft gradient of the app's tint (lamba.json "tint")
+//        clips/<id>-host.mp4       role host: the Host's phone, big (the real Lamba remote, its preview and tiles)
+//        clips/<id>-player.mp4     role player: a Player's phone, big (an app with Players)
+//        clips/<id>-together.mp4   role together: the screen with a phone over its corner, no words in the picture (the page shows the caption)
+//        clips/<id>-moment.mp4     role screen: a later moment of the same play, full frame
+//        clips/<id>-late.mp4       role host (an app with no Players): the Host's phone, later
+//        clips/<id>-settings.mp4   role host, an app with settings of its own: the Host chooses, the screen changes
 //   4. lists them in lamba.json "clips" and removes the starter's placeholder clips.
 // Then look at each poster, and write captions in lamba.json that say what each clip shows.
 //
@@ -25,7 +30,7 @@
 //   phone: "g1", "g2", "g3" (Players) or "owner" (the Host); tap: a CSS selector on that phone's page; wait: milliseconds.
 //   Or an object { "setup": [steps run once before recording], "steps": [...], "once": true (play the steps once, then hold the last picture instead of looping) }.
 //   A step may also carry "upload": "path/to/file" (a file the tap's picker gets; the path is relative to where you run this) or "text": "typed into the tap's field".
-//   --main owner records the Host's phone (default: the first Player's).
+//   --tag later names a recording's clips <id>-later-screen and so on (a live scenario's rig.record). --kinds start,screen,host,player,together,moment records only those (default: all of them; the player clip only for an app with Players).
 //   --name my-clip --caption "words" records ONE clip, clips/my-clip.mp4 with its poster, and leaves lamba.json alone. --players "Alex Morgan,Jamie Parker", --host "Taylor Brooks" and --guests 3 set the people.
 //   --live scenario.mjs --base http://127.0.0.1:8771  records against the real worker, the real screen page and the real Lamba remote (a local `wrangler dev`, Chrome, ffmpeg and Lamba's repository's tests/sdk-room.mjs),
 //   for what the simulator cannot show; scenario.mjs exports default async rig => { ...; await rig.record(async () => { ...the clip... }) } (see docs/sdk/ASSETS.md).
@@ -47,7 +52,7 @@ const PLACEHOLDERS = ["5bbbd22bc3f4b056ee767a62b8ec885c6766ba38d5e57b72da4918b33
 const args = process.argv.slice(2), flag = f => args.includes(f);
 const opt = k => { const i = args.indexOf(k); return i > -1 ? args[i + 1] : null; };
 const MAIN = opt("--main"), ONE = opt("--name"), ONECAP = opt("--caption"), HEADED = flag("--headed"), SECONDS = Math.max(6, Math.min(14, +opt("--seconds") || 10)), SCRIPT = opt("--script");
-const named = args.filter((a, i) => !a.startsWith("-") && !["--seconds", "--script", "--main", "--name", "--caption", "--kinds", "--players", "--host", "--guests", "--live", "--base"].includes(args[i - 1]));
+const named = args.filter((a, i) => !a.startsWith("-") && !["--seconds", "--script", "--main", "--name", "--caption", "--kinds", "--tiles", "--group", "--tag", "--players", "--host", "--guests", "--live", "--base"].includes(args[i - 1]));
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const say = (...a) => console.log(...a);
 const W = 540, H = 920, BG = "0x141416", FPS = 30;
@@ -116,7 +121,7 @@ async function sealed(p, rig, view, ms) {   // the app's own page inside a rig, 
   const end = Date.now() + (ms || 10000);
   while (Date.now() < end) {
     const r = rigFrame(p, rig);
-    if (r) for (const f of p.frames()) if (f.parentFrame() === r && f.url() === "about:srcdoc") { const v = await f.evaluate(() => window.Lamba && Lamba.screen && Lamba.screen.view).catch(() => null); if (v === view) return f; }
+    if (r) for (const f of p.frames()) if (f.parentFrame() === r && f.url() === "about:srcdoc") { const v = await f.evaluate(() => window.Lamba && Lamba.screen && Lamba.screen.view).catch(() => null); if (v === view || (Array.isArray(view) && view.includes(v))) return f; }
     await wait(150);
   }
   return null;
@@ -163,7 +168,15 @@ async function tapRandom(f, shown = true, who = "") {
 // play for ms: the script's steps in a loop, else a tap every second or so, on each player's phone in turn (the phone
 // in the picture more often)
 let PAGE = null;   // the simulator's page (file pickers open on it)
+// a step with "host": a tap on the Host's real remote (its tiles, its sheet), by CSS selector, in the page the Host's phone shows; "rdump": true lists what is there
+async function remoteStep(s) {
+  const rf = rigFrame(PAGE, "owner"); if (!rf) return false;
+  if (s.rdump) { say("remote: " + await rf.evaluate(() => [...document.querySelectorAll("button,[role=button],input")].filter(e => e.getClientRects().length).map(e => e.tagName.toLowerCase() + (e.id ? "#" + e.id : "") + (e.className && typeof e.className === "string" ? "." + e.className.trim().split(/\s+/).join(".") : "") + (e.getAttribute("aria-label") ? "[aria-label=" + e.getAttribute("aria-label") + "]" : "") + " | " + (e.textContent || "").trim().slice(0, 24)).join("\n  ")).catch(e => String(e))); return true; }
+  const ok = await rf.evaluate(sel => { const e = document.querySelector(sel); if (!e || e.disabled || !e.getClientRects().length) return false; e.scrollIntoView({ block: "nearest", inline: "center" }); e.click(); return true; }, s.host).catch(() => false);
+  if (ok) PRESSED.owner = (PRESSED.owner || 0) + 1; return ok;
+}
 async function pressStep(phones, main, s) {   // one step with a tap; true when pressed
+  if (s.host || s.rdump) return remoteStep(s);
   const who = s.phone || main, f = phones[who]; if (!f || !s.tap) return false;
   if (s.upload) PAGE.once("filechooser", fc => fc.setFiles(resolve(s.upload)).catch(() => {}));
   if (who === main) { if (!await f.isVisible(s.tap).catch(() => false) || !await f.click(s.tap, { force: true, timeout: 1500 }).then(() => true, () => false)) return false; }
@@ -187,6 +200,7 @@ async function play(phones, main, steps, ms, once) {
     for (let i = 0; Date.now() < end; i = (i + 1) % steps.length) {
       const s = steps[i];
       if (s.wait) { await wait(Math.min(+s.wait || 0, end - Date.now())); continue; }
+      if (s.host || s.rdump) { await remoteStep(s); await wait(250); continue; }
       const who = s.phone || main, f = phones[who]; if (!f || !s.tap) { await wait(100); continue; }   // a key not on that phone now is skipped at once, so one script covers every screen of the app
       if (who === main) { if (!await f.isVisible(s.tap).catch(() => false) || !await f.click(s.tap, { force: true, timeout: 1500 }).then(() => true, () => false)) { await wait(100); continue; } }
       else if (!await f.evaluate(PRESS_UNSEEN, s.tap).catch(() => false)) { await wait(100); continue; }
@@ -200,6 +214,29 @@ async function play(phones, main, steps, ms, once) {
     const who = Math.random() < 0.55 ? main : order[k++ % order.length];
     if (phones[who]) await tapRandom(phones[who], who === main, who);
     await wait(Math.min(700 + Math.random() * 700, Math.max(0, end - Date.now())));
+  }
+}
+
+// the Host's own view while a clip plays: the real remote's sheet open (the live copy of the screen on top, the row of tiles under it), the app's action tiles tapped, then one setting chosen and sent, over and over
+async function hostDrawer(rf, end, openOnly) {
+  const ONLY = opt("--tiles") ? new RegExp(opt("--tiles"), "i").source : "";   // --tiles "^(Colour|Glow)": only the setting tiles whose name matches are used
+  if (!rf) return;
+  await rf.evaluate(() => { const g = document.querySelector(".g-grab"); if (g && /^Show/.test(g.getAttribute("aria-label") || "")) g.click(); }).catch(() => {}); await wait(900);
+  if (openOnly) return;
+  const SKIP = /^(Try as a player|Frame|Brightness|Effects|Schedule|Sound|Music)/;
+  for (let i = 0; Date.now() < end - 900; i++) {
+    const did = await rf.evaluate(([i, only]) => {
+      const tiles = [...document.querySelectorAll(".g-tile")].filter(b => b.getClientRects().length && !b.disabled), acts = tiles.filter(b => b.classList.contains("sdk-act") && !/^(Pause|Stop|End|Skip|Reset|Restart|Clear|Delete|Leave|Cancel)/i.test(b.getAttribute("aria-label") || b.textContent)), sets = tiles.filter(b => !b.classList.contains("sdk-act") && !/^(Try as a player|Frame|Brightness|Effects|Schedule|Sound|Music)/.test(b.getAttribute("aria-label") || b.textContent) && (!only || new RegExp(only, "i").test(b.getAttribute("aria-label") || b.textContent)));
+      const el = acts.length && (i % 2 === 0 || !sets.length) ? acts[Math.floor(i / 2) % acts.length] : sets[Math.floor(i / 2) % sets.length];
+      if (!el) return ""; el.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" }); el.click(); return el.classList.contains("sdk-act") ? "act" : "set";
+    }, [i, ONLY]).catch(() => "");
+    await wait(900);
+    if (did === "set") {   // a setting panel: pick the next choice, send it, go back
+      await rf.evaluate(i => { const on = document.querySelector("button.on"), c = on ? [...on.parentElement.querySelectorAll("button")].filter(b => b.getClientRects().length) : []; if (c.length) c[i % c.length].click(); }, i).catch(() => {});
+      await wait(700);
+      await rf.evaluate(() => { const s = [...document.querySelectorAll("button")].find(b => /^Send to /i.test(b.textContent) && b.offsetWidth > 0 && !b.disabled); if (s) s.click(); }).catch(() => {}); await wait(900);
+      await rf.evaluate(() => { const b = document.querySelector(".g-back"); if (b && b.offsetWidth) b.click(); }).catch(() => {}); await wait(700);
+    }
   }
 }
 
@@ -255,7 +292,7 @@ async function recordLive(dir, browser, tmp) {
   await p.evaluate(([i, k, n]) => { localStorage.setItem("lf-lamba", JSON.stringify({ token: "dev:alice", until: Date.now() + 36e5, user: { email: "alice@test.local", name: n } })); localStorage.setItem("lf-key-" + i, k); localStorage.setItem("lf-screens", JSON.stringify([{ id: i, name: "Living room" }])); localStorage.setItem("lf-current", i); }, [rm, hostKey, nameOf]);
   await p.goto(BASE + "/remote/?pair=" + rm + "&open=" + id); await wait(2500);
   const hostApp = () => p.frames().find(f => /\/remote\/app\?app=/.test(f.url())), tvApp = () => tvPage.frames().find(f => new RegExp(id + "/tv\\.html").test(f.url()));
-  const players = [];
+  const players = [], moments = [];
   const rig = {
     page: p, tvPage, id, wait, own, setting, hostApp, tvApp, host: { page: p, app: hostApp }, players, errors,
     async until(fn, ms = 15000) { const end = Date.now() + ms; while (Date.now() < end) { const v = await Promise.resolve().then(fn).catch(() => null); if (v) return v; await wait(150); } return null; },
@@ -269,16 +306,25 @@ async function recordLive(dir, browser, tmp) {
       const pl = { name, page: pg, app: () => pg.frames().find(f => /\/remote\/app\?app=/.test(f.url())) || pg.mainFrame() }; players.push(pl); return pl;
     },
     async shot(file, which) { await (which === "tv" ? tvPage : p).screenshot({ path: file }); },
-    async record(fn) {
-      const t0 = await camT.start(), p0 = await camP.start(), from = Math.max(t0, p0);
+    // one call = one moment of the play, which makes up to four clips at once: the screen, the Host's phone, a Player's phone (when rig.add made one) and the room together.
+    // rig.record(fn) is the first moment (clips <id>-screen, -host, -player, -together); rig.record(fn, "later") the next (<id>-later-screen, ...). Six clips need two moments, or one and the settings.
+    async record(fn, tag) {
+      const pl = players[0], camQ = pl ? camera(pl.page, await pl.page.context().newCDPSession(pl.page), (mkdirSync(join(tmp, "q" + (moments.length)), { recursive: true }), join(tmp, "q" + moments.length))) : null;
+      const t0 = await camT.start(), p0 = await camP.start(), q0 = camQ ? await camQ.start() : 0, from = Math.max(t0, p0, q0);
       await fn(); const rest = from + SECONDS + 0.5 - Date.now() / 1000; if (rest > 0) await wait(rest * 1000);
-      rig.window = { kind: "play", from, to: Date.now() / 1000, frames: await camT.stop(), pframes: await camP.stop(), tv: { x: 0, y: 0, w: 1600, h: 900 }, ph: { x: 0, y: 0, w: 390, h: 844 }, tvScale: 1 };
+      const win = { from, to: Date.now() / 1000, frames: await camT.stop(), pframes: await camP.stop(), qframes: camQ ? await camQ.stop() : null, tv: { x: 0, y: 0, w: 1600, h: 900 }, ph: { x: 0, y: 0, w: 390, h: 844 }, tvScale: 1 };
+      tag = tag || opt("--tag"); const kinds = (opt("--kinds") || "").split(",").filter(Boolean), keep = k => !kinds.length || kinds.includes(k);
+      const pre = tag ? tag + "-" : "", cap = w => (tag ? tag.replace(/^./, c => c.toUpperCase()) + ": " : "") + CAPTION[w];
+      if (keep("screen")) moments.push(Object.assign({}, win, { kind: "screen", name: pre + "screen", role: "screen", cap: cap("screen") }));
+      if (keep("host")) moments.push(Object.assign({}, win, { kind: "phone", name: pre + "host", role: "host", cap: cap("host") }));
+      if (win.qframes && keep("player")) moments.push(Object.assign({}, win, { kind: "phone", pframes: win.qframes, name: pre + "player", role: "player", cap: cap("player") }));
+      if (keep("together")) moments.push(Object.assign({}, win, { kind: "play", name: pre + "together", role: "together", cap: cap("together") }));
     }
   };
   await scenario(rig);
   await tvCtx.close(); await hostCtx.close();
-  if (!rig.window) throw new Error("the scenario never called rig.record");
-  return { id, m, windows: [rig.window], errors };
+  if (!moments.length) throw new Error("the scenario never called rig.record");
+  return { id, m, windows: moments, errors };
 }
 async function record(dir, base, browser, tmp) {
   const m = JSON.parse(readFileSync(join(dir, "lamba.json"), "utf8")), id = m.id || basename(dir);
@@ -295,10 +341,9 @@ async function record(dir, base, browser, tmp) {
   await p.setInputFiles("#zipInput", { name: id + ".zip", mimeType: "application/zip", buffer: zipOf(dir, id + "/", noFrame) });
   if (!await sealed(p, "tv", "screen", 15000)) throw new Error("the screen page never said hello: run node lamba-test.mjs " + basename(dir) + " and fix what it says first");
   const rigs = guestsN ? Array.from({ length: guestsN }, (x, i) => "g" + (i + 1)) : ["owner"], phones = {};
-  for (const r of rigs) phones[r] = await sealed(p, r, r === "owner" ? "controller" : "guest", 10000);
-  if (guestsN) phones.owner = await sealed(p, "owner", "controller", MAIN === "owner" ? 500 : 4000);
+  for (const r of rigs) if (r !== "owner") phones[r] = await sealed(p, r, "guest", 10000);
+  phones.owner = await sealed(p, "owner", ["controller", "preview"], guestsN ? 4000 : 10000) || phones.owner;   // (an app with no Players has no controller view of its own: the Host's phone shows its small picture and its tiles)
   const main = MAIN || rigs[0];
-  if (MAIN === "owner") phones.owner = rigFrame(p, "owner") || phones.owner;   // the Host: the real Lamba remote page itself (its drawer and keys), not the app page inside it
 
   if (!phones[main] && process.env.CLIPS_DEBUG) { for (const fr of p.frames()) say("frame " + fr.url().slice(0, 110) + " parent=" + (fr.parentFrame() ? fr.parentFrame().url().slice(0, 80) : "-") + " view=" + await fr.evaluate(() => window.Lamba && Lamba.screen && Lamba.screen.view).catch(() => "?")); }
   if (!phones[main]) throw new Error("the phone page never said hello on " + (guestsN ? "a Player's phone" : "the Host's phone"));
@@ -306,17 +351,29 @@ async function record(dir, base, browser, tmp) {
   await showRig(p, main); await realSize(p); await top();
   await showRig(p, main); if (setupSteps) await setup(phones, main, setupSteps);
   const windows = [];
-  // the screen and a phone, then the same phone big
-  for (const kind of (ONE ? "play" : opt("--kinds") || "play,phone").split(",")) {
-    await showRig(p, main); const tv = await box(p, "#tvScreen"), ph = await box(p, glass(main));
+  // the parts of the room, each recorded for SECONDS in turn: [name, layout, whose phone is shown, role]
+  // (the Host's own clip is recorded last, from its settings: that reloads the simulator)
+  const SPECS = guestsN
+    ? [["start", "play", "g1", "together"], ["screen", "screen", "g1", "screen"], ["player", "phone", "g1", "player"], ["together", "play", "g1", "together"], ["moment", "screen", "g1", "screen"]]
+    : [["start", "play", "owner", "together"], ["screen", "screen", "owner", "screen"], ["together", "play", "owner", "together"], ["moment", "screen", "owner", "screen"], ["later", "screen", "owner", "screen"]];
+  if (setupSteps) await setup(phones, SPECS[0][2], setupSteps);   // the lobby, the joining: out of the clips (setup runs once, before the first)
+  const want = ONE ? ["together"] : (opt("--kinds") || "").split(",").filter(Boolean);
+  for (const [name, layout, rig0, role] of SPECS) {
+    if (want.length && !want.includes(name) && !(ONE && name === "together")) continue;
+    const rig = MAIN === "owner" && layout === "play" ? "owner" : rig0;
+    await showRig(p, rig); const tv = await box(p, "#tvScreen"), ph = await box(p, glass(rig));
+    if (process.env.CLIPS_SHOT) say(name + ": showing " + await p.evaluate(() => { const s = document.querySelector("#who [aria-selected=true]"); return s && s.getAttribute("aria-label") + " | glass boxes " + [...document.querySelectorAll(".sim-phone")].map(x => x.dataset.rig + ":" + Math.round(x.getBoundingClientRect().height)).join(","); }));
     if (!tv || !ph) throw new Error("the simulator's screen or phone is not on screen");
-    const from = await cam.start(); await play(phones, main, steps, SECONDS * 1000 + 500, once);
-    windows.push({ kind, from, to: Date.now() / 1000, frames: await cam.stop(), tv, ph });
+    const from = await cam.start(), until = Date.now() + SECONDS * 1000 + 500;
+    await Promise.all([play(phones, rig, steps, SECONDS * 1000 + 500, once), guestsN ? null : hostDrawer(rigFrame(p, "owner"), until, !!steps)]);   // (no Players: the Host's own tiles are what plays)
+    if (process.env.CLIPS_SHOT) await p.screenshot({ path: process.env.CLIPS_SHOT + "-" + name + ".png" });
+    windows.push({ kind: layout, name, role, from, to: Date.now() / 1000, frames: await cam.stop(), tv, ph });
   }
   // settings of its own: the Host's drawer open at the first setting with pictures to choose, each choice sent to the screen
   const fields = (m.settings || {}).fields || {}, pick = q => q && q.setting && ["choice", "switch", "colour"].includes((fields[q.setting] || {}).type);
-  const g = ((m.settings || {}).groups || []).find(x => x && x.key && Array.isArray(x.parts) && x.parts.some(pick));
-  if (g && !ONE) {
+  const g = ((m.settings || {}).groups || []).find(x => x && x.key && Array.isArray(x.parts) && x.parts.some(pick) && (!opt("--group") || x.key === opt("--group")));
+  const wantHost = !ONE && (!want.length || want.includes("host") || want.includes("settings"));
+  if (g && wantHost) {
     const part = g.parts.find(pick);
     await p.goto(base + "/devs/simulator/?app=local" + (guestsN ? "&guests=" + guestsN + "&join=skip" : "") + "&g=" + encodeURIComponent(g.key) + "&p=" + encodeURIComponent(part.setting));
     const host = await (async () => { const end = Date.now() + 10000; while (Date.now() < end) { const f = rigFrame(p, "owner"); if (f && await f.$(".ctl-strip button").catch(() => null)) return f; await wait(200); } return null; })();
@@ -324,8 +381,10 @@ async function record(dir, base, browser, tmp) {
     for (const r of rigs) if (r !== "owner") phones[r] = await sealed(p, r, "guest", 6000);
     await showRig(p, "owner"); await realSize(p); await top();
     await showRig(p, "owner"); const tv = await box(p, "#tvScreen"), ph = await box(p, glass("owner"));
+    if (setupSteps && (host && tv && ph)) await setup(phones, "g1" in phones ? "g1" : "owner", setupSteps);   // (the simulator started again: the lobby once more)
     if (host && tv && ph) {
       const n = await host.evaluate(() => document.querySelectorAll(".ctl-strip button").length).catch(() => 0), from = await cam.start(), end = Date.now() + SECONDS * 1000 + 500;
+      const playing = steps ? play(phones, "g1" in phones ? "g1" : "owner", steps, SECONDS * 1000 + 500, once) : null;   // (the Players play on while the Host chooses)
       for (let i = 1; Date.now() < end && n; i++) {
         await host.evaluate(i => { const b = document.querySelectorAll(".ctl-strip button")[i]; if (b) { b.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" }); b.click(); } }, i % n).catch(() => {});
         await wait(700);
@@ -333,8 +392,13 @@ async function record(dir, base, browser, tmp) {
         if (guestsN && !steps && phones[main]) await tapRandom(phones[main], false, main);   // (the Host's phone is the one in the picture here)
         await wait(Math.min(1500, Math.max(0, end - Date.now())));
       }
-      windows.push({ kind: "settings", from, to: Date.now() / 1000, frames: await cam.stop(), tv, ph });
+      await playing;
+      windows.push({ kind: "phone", name: "host", role: "host", from, to: Date.now() / 1000, frames: await cam.stop(), tv, ph });
     }
+  }
+  else if (wantHost) {   // no setting with pictures to choose: the Host's phone as it is, its sheet open, its action tiles tapped
+    await showRig(p, "owner"); const tv = await box(p, "#tvScreen"), ph = await box(p, glass("owner"));
+    if (tv && ph) { const from = await cam.start(), until = Date.now() + SECONDS * 1000 + 500; await Promise.all([play(phones, "owner", steps, SECONDS * 1000 + 500, once), hostDrawer(rigFrame(p, "owner"), until)]); windows.push({ kind: "phone", name: "host", role: "host", from, to: Date.now() / 1000, frames: await cam.stop(), tv, ph }); }
   }
   await ctx.close();
   return { id, m, windows, errors };
@@ -393,19 +457,24 @@ async function cut(browser, w, out, tmp, m) {
   // exact boxes, no bezel and no page around them: the phone is 390 x 844 (its own glass), the screen is its picture
   const crop = (b, e = 1) => "crop=" + (Math.floor(b.w) - 2 * e) + ":" + (Math.floor(b.h) - 2 * e) + ":" + (Math.ceil(b.x) + e) + ":" + (Math.ceil(b.y) + e);   // inside the box: one pixel for the phone, 4 for the screen (its corners are rounded 12 px, and the page shows white behind a rounded corner)
   const tint = /^#[0-9a-fA-F]{6}$/.test((m || {}).tint || "") ? m.tint : "#3a3d48";
-  let pw, ph, x, y, base, ground;
-  if (w.kind === "phone") {   // the phone, big, centred on the tint's soft gradient
+  let pw, ph, x, y, base, ground, only = null;
+  const capOf = w.cap || (ONECAP && w.kind === "play" ? ONECAP : CAPTION[w.name || w.kind]) || "";
+  if (w.kind === "screen") {   // the screen on its own: the WHOLE picture (16:9, never cropped) edge to edge, in the middle of the clip, its words under it
+    const th = even(W * 9 / 16), y0 = Math.round((H - th) / 2) - 36; pw = 250; ph = even(pw * w.ph.h / w.ph.w);
+    ground = await groundPng(browser, tint, "", tmp, null);   // no words in the picture: the app page shows the caption above each clip (said once)
+    only = "[0:v]fps=" + FPS + "," + crop(w.tv, 4) + ",scale=" + W + ":" + th + ":flags=lanczos,setsar=1,format=yuv420p[sc];[3:v][sc]overlay=0:" + y0 + ",format=yuv420p[v]";
+  } else if (w.kind === "phone") {   // the phone, big, centred on the tint's soft gradient
     ph = even(H - 2 * 28); pw = even(ph * w.ph.w / w.ph.h); x = (W - pw) / 2; y = 28;
     ground = await groundPng(browser, tint, "", tmp, null);
     base = "[3:v]null[base]";
   } else {   // the WHOLE screen picture (16:9, never cropped) edge to edge across the top; the phone at a natural size over its lower right by a fifth of its height, clear of the centre
     const th = even(W * 9 / 16);
     pw = 250; ph = even(pw * w.ph.h / w.ph.w); x = W - pw - 12; y = w.pframes ? th + 22 : th - Math.round(ph * 0.2);   // (a live recording keeps the whole phone clear of the screen)
-    ground = await groundPng(browser, tint, (ONECAP && w.kind === "play" ? ONECAP : CAPTION[w.kind]) || "", tmp, { x: 22, y: Math.round((th + H) / 2) + 20, w: x - 22 - 16 });
+    ground = await groundPng(browser, tint, "", tmp, null);   // no words in the picture (the page shows the caption)
     base = "[0:v]fps=" + FPS + "," + crop(w.tv, 4) + ",scale=" + W + ":" + th + ":flags=lanczos,setsar=1,format=yuv420p[sc];[3:v][sc]overlay=0:0[base]";
   }
   const g = await pngs(browser, pw, ph, tmp), pad = g.pad;
-  const filter = base + ";" + PV + "fps=" + FPS + "," + crop(w.ph) + ",scale=" + pw + ":" + ph + ":flags=lanczos,setsar=1,format=yuva420p[p0];"
+  const filter = only || base + ";" + PV + "fps=" + FPS + "," + crop(w.ph) + ",scale=" + pw + ":" + ph + ":flags=lanczos,setsar=1,format=yuva420p[p0];"
     + "[1:v]scale=" + pw + ":" + ph + ",format=gray[m];[p0][m]alphamerge[phone];"
     + "[base][2:v]overlay=" + (x - pad) + ":" + (y - pad + 12) + ":format=auto[b2];[b2][phone]overlay=" + x + ":" + y + ":format=auto[b3];[b3][4:v]overlay=" + (x - g.bz) + ":" + (y - g.bz) + ":format=auto,format=yuv420p[v]";
   execFileSync(FF, ["-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", list, "-loop", "1", "-framerate", String(FPS), "-i", g.mask, "-loop", "1", "-framerate", String(FPS), "-i", g.shadow,
@@ -422,7 +491,8 @@ async function poster(browser, mp4, out) {
   await pg.close(); unlinkSync(png);
   writeFileSync(out, Buffer.from(b64, "base64"));
 }
-const CAPTION = { play: "On the screen, played from a phone", phone: "On a phone", settings: "Settings, live on the screen" };
+const CAPTION = { start: "How the room starts", screen: "The screen, full frame", host: "The Host's phone", player: "A Player's phone", together: "The room together: screen and phone", moment: "A later moment of the same play", later: "Later still", peak: "The best moment", late: "The Host's phone, a little later", settings: "Settings, live on the screen", play: "The room together", phone: "On a phone" };
+const ROLE_OF = { start: "together", screen: "screen", host: "host", player: "player", together: "together", moment: "screen", later: "screen", peak: "screen", late: "host", settings: "host", play: "together", phone: "player" };
 
 // lamba.json's "clips", changed in place (the rest of the file as it was)
 function listClips(dir, clips) {
@@ -455,23 +525,24 @@ mkdirSync(join(dir, "clips"), { recursive: true });
 const made = [];
 try {
   for (const w of R.windows) {
-    const name = ONE || R.id + "-" + w.kind, mp4 = join(dir, "clips", name + ".mp4"), webp = join(dir, "clips", name + "-poster.webp");
+    const name = ONE || R.id + "-" + (w.name || w.kind), mp4 = join(dir, "clips", name + ".mp4"), webp = join(dir, "clips", name + "-poster.webp");
     await cut(browser, w, mp4, tmp, R.m); await poster(browser, mp4, webp);
-    made.push({ name, mp4, webp, caption: ONECAP || CAPTION[w.kind] });
+    made.push({ name, mp4, webp, caption: ONECAP || w.cap || CAPTION[w.name || w.kind], role: w.role || ROLE_OF[w.name || w.kind] });
   }
 } catch (e) { say("lamba clips: making the clips stopped: " + String(e && (e.stderr && String(e.stderr).trim().split("\n").pop() || e.message) || e).split("\n")[0]); }
 await browser.close(); server.close(); rmSync(tmp, { recursive: true, force: true });
 if (ONE) { for (const x of made) say("wrote " + x.mp4); process.exit(0); }
-if (made.length < 2) { say("lamba clips: fewer than 2 clips were made, so lamba.json is as it was. Run it again, or with --headed to watch."); process.exit(1); }
+if (made.length < (opt("--kinds") ? 1 : 3)) { say("lamba clips: fewer than " + (opt("--kinds") ? 1 : 3) + " clips were made, so lamba.json is as it was. Run it again, or with --headed to watch."); process.exit(1); }
 // the starter's placeholders out (Lamba refuses an upload with them), and the clips listed before that are not these kept after them
 const sha = f => createHash("sha256").update(readFileSync(f)).digest("hex"), removed = [];
 for (const n of readdirSync(join(dir, "clips"))) { const f = join(dir, "clips", n); if (statSync(f).isFile() && PLACEHOLDERS.includes(sha(f))) { unlinkSync(f); removed.push("clips/" + n); } }
 const kept = (Array.isArray(R.m.clips) ? R.m.clips : []).filter(c => Array.isArray(c) && !made.some(x => x.name === c[0]) && existsSync(join(dir, "clips", c[0] + ".mp4")) && existsSync(join(dir, "clips", c[0] + "-poster.webp")));
-listClips(dir, made.map(x => [x.name, x.caption]).concat(kept));
+listClips(dir, made.map(x => [x.name, x.caption, x.role]).concat(kept));
 say("\nWritten in " + relative(process.cwd(), join(dir, "clips")) + ", each 540 x 920, H.264, " + SECONDS + " s:");
 for (const x of made) say("  " + relative(process.cwd(), x.mp4) + " (" + Math.round(statSync(x.mp4).size / 1024) + " KB) and " + basename(x.webp));
 if (removed.length) say("Removed the starter's placeholders: " + removed.join(", "));
 if (kept.length) say("Kept your own clips after these: " + kept.map(c => c[0]).join(", "));
 { const k = Object.keys(PRESSED).sort(); say("Presses while recording: " + (k.length ? k.map(x => (x === "owner" ? "the Host " : "Player " + x.slice(1) + " ") + PRESSED[x]).join(", ") : "none (check the selectors in --script)")); }
 if (R.errors.length) say("Errors in a page while recording (run node lamba-test.mjs): " + [...new Set(R.errors)].slice(0, 3).join(" | "));
+if (made.length + kept.length < 6) say("Lamba wants 6 clips or more (the screen, the Host's phone, a Player's phone, the room together, and two more moments): record the rest, for instance with --name and --caption, or run it again without --kinds.");
 say("Next: look at each -poster.webp, and write captions in lamba.json \"clips\" that say what each clip shows (60 letters at most).");

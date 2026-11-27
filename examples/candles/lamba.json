@@ -171,12 +171,34 @@
  "frame": "none",
  "clips": [
   [
+   "candles-start",
+   "How the room starts",
+   "together"
+  ],
+  [
    "candles-tv",
-   "What the screen shows"
+   "What the screen shows",
+   "screen"
   ],
   [
    "candles-phone",
-   "What a phone does"
+   "What the Host does",
+   "host"
+  ],
+  [
+   "candles-player",
+   "What a Player does",
+   "player"
+  ],
+  [
+   "candles-together",
+   "The room together",
+   "together"
+  ],
+  [
+   "candles-moment",
+   "A later moment",
+   "screen"
   ]
  ]
 }

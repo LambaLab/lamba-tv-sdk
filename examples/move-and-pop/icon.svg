@@ -1,1 +1,18 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 60"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3a95b8"/><stop offset="1" stop-color="#0f2f3f"/></linearGradient></defs><rect width="60" height="60" fill="url(#g)"/><g fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><circle cx="38" cy="22" r="9" opacity=".8"/><circle cx="20" cy="38" r="6" opacity=".8"/></g><circle cx="30" cy="30" r="5" fill="#fff"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+<defs>
+<linearGradient id="bg" x1="0" y1="0" x2=".5" y2="1"><stop offset="0" stop-color="#5fc3d6"/><stop offset=".5" stop-color="#2a6f8f"/><stop offset="1" stop-color="#0f2f3f"/></linearGradient>
+<radialGradient id="ball" cx="35%" cy="30%" r="75%"><stop offset="0" stop-color="#fffaf0"/><stop offset=".35" stop-color="#ffd27a"/><stop offset="1" stop-color="#e0822a"/></radialGradient>
+<radialGradient id="bub" cx="35%" cy="30%" r="70%"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".7" stop-color="#bff0ff" stop-opacity=".12"/><stop offset="1" stop-color="#bff0ff" stop-opacity=".45"/></radialGradient>
+<filter id="soft" filterUnits="userSpaceOnUse" x="0" y="0" width="120" height="120"><feGaussianBlur stdDeviation="3"/></filter>
+</defs>
+<rect width="120" height="120" fill="url(#bg)"/>
+<path d="M0 92c30-12 70-14 120-6v34H0z" fill="#0f2f3f" opacity=".45"/>
+<circle cx="86" cy="34" r="16" fill="url(#bub)" stroke="#e6fbff" stroke-width="2" stroke-opacity=".8"/>
+<ellipse cx="80" cy="27" rx="5" ry="3" fill="#fff" opacity=".8" transform="rotate(-30 80 27)"/>
+<circle cx="98" cy="68" r="9" fill="url(#bub)" stroke="#e6fbff" stroke-width="2" stroke-opacity=".8"/>
+<g stroke="#e6fbff" stroke-width="2.6" stroke-linecap="round" opacity=".9"><path d="M30 22l3 5M44 18l-1 6M50 30l-5 2M24 34l6 0"/></g>
+<ellipse cx="52" cy="98" rx="22" ry="5" fill="#061a24" opacity=".55" filter="url(#soft)"/>
+<circle cx="52" cy="74" r="22" fill="url(#ball)"/>
+<ellipse cx="44" cy="64" rx="8" ry="5" fill="#fff" opacity=".7" transform="rotate(-30 44 64)"/>
+<path d="M16 76c4 0 7-1 10-3M14 86c4 0 8-1 11-3" fill="none" stroke="#e6fbff" stroke-width="2.6" stroke-linecap="round" opacity=".7"/>
+</svg>

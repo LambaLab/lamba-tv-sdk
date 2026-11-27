@@ -20,7 +20,7 @@ then carry on (upload, preview link, submit). If they say not now, ask again at 
 download is the last resort, only if every way to connect fails, and then you explain each tap.
 
 **One app, one function.** Lamba TV apps are small apps that do one thing well: a quiz, a countdown, a drawing game.
-One thing means one job: a few tools are fine when they all serve it (Room sharing shares a screen, lets people point
+One thing means one job: a few tools are fine when they all serve it (Screen Share shares a screen, lets people point
 and draw on it, and has a room mic: one meeting). Something people may want beside it is its own app (a whiteboard),
 which the Host puts next to it on the screen. Build the one thing the developer asked for. No menus of games, no extra features, no settings screens of your own.
 
@@ -34,7 +34,7 @@ One folder, the app's id as its name (2 to 24 small letters, digits or dashes, s
   tv.html        the big screen: the authority. It keeps time and state (Lamba.store) and decides
   phone.html     each Player's remote (view guest, the whole phone) and any settings parts you draw (view part)
   icon.svg       its icon; card.svg its 320 x 180 picture
-  clips/         2 or more real clips: <name>.mp4 (540 x 920 H.264, 6 to 14 s) and <name>-poster.webp
+  clips/         6 to 10 real clips (one for each role: screen, host, player, together): <name>.mp4 (540 x 920 H.264, 6 to 14 s) and <name>-poster.webp
 ```
 
 Plain HTML and JavaScript, no build step, no packages, no frameworks. Every page loads the SDK with
@@ -56,6 +56,11 @@ Types for every call: `lamba.d.ts`. Every field of lamba.json: `lamba.schema.jso
    No other address unless lamba.json `outside` declares it (`https://host`, approved by Lamba). No `fetch` to
    anywhere else, no WebSocket, no localStorage, sessionStorage, indexedDB or cookies (use `Lamba.store`), no
    forms that post, no popups, no links that leave Lamba, no QR codes of your own (the host draws the join card).
+3b. **The screen is only watched.** tv.html has no controls: no buttons, mode switches (touch, tilt, camera), sound or
+   mute icon, pause, settings or "click to start", and no QR code, join code, PIN or "scan to pair" of its own. Lamba
+   draws the join card and the code, gives the sound control, and starts the app. Every control lives on the phones:
+   the Host's settings and actions in lamba.json, a Player's keys in phone.html. The check refuses a QR code or join
+   words of its own on the screen and warns on any button, field or click or key listener there (rule 20).
 4. **A real player remote.** Every app Players join (`guests`, or `players.max` above 0) has one: phone.html in view
    `guest`, the whole phone, a full screen, high quality, realistic remote that feels like a real physical remote or
    controller made for this app. Build it from the kit: `.l-remote` (the body, in the app's own colours), `.l-well` and
@@ -64,22 +69,47 @@ Types for every call: `lamba.d.ts`. Every field of lamba.json: `lamba.schema.jso
    works one handed, never scrolls (`lamba-test` screenshots it at 390 x 844 and checks). To steer or aim: a slide track,
    never a cross of arrow buttons. A game controller has a left or right hand switch that mirrors it, asked once. Steady
    for children: nothing jumps under a finger. Lamba's own join steps come first (the code, their name when askName is true, the line): never
-   repeat them, never ask for a name yourself. Ask for names only if the app shows them (`"askName": true` in lamba.json, then read `Lamba.me().name`). Onboarding for Players, if any, is short and realistic: real
-   pictures of the app or the real screen, with plain words; never gimmick illustrations, clip art or emoji (`lamba check`
+   repeat them, never ask for a name yourself. Ask for names only if the app shows them (`"askName": true` in lamba.json, then read `Lamba.me().name`). Onboarding for the Host and every Player (rule 4b) is short and realistic: real
+   line drawings or pictures of the app, with plain words; never gimmick illustrations, clip art or emoji (`lamba check`
    refuses emoji in the pages and lamba.json, and an app Players join with no view `guest`).
    The remote is full screen and visual: pictures for choices (mark the groups Players may change with "players": true in lamba.json, and Lamba shows them the Host's picture tiles), and a visible sound control when the app has sound (add "forPlayers": ["sound"] to lamba.json for Lamba's own Sound tile; also "brightness", "frame", "effects" (cracks, lines, flies: never a scare) and "schedule" (Players only see it, the Host alone changes it), each off until the Host switches it on). For background music, never ship your own files: add "music": true to lamba.json (and "music" to forPlayers to share it) and Lamba plays its own library on the screen, with a Music tile for the Host. No decorative status text or stray icons at the top, no hidden hold to act gestures (a visible key held on purpose is fine: `LambaUI.hold`, with beats the screen lets expire; the example `fireside`), and options big enough for a thumb (44 px or more). Many people sending a little (an ambient app: fan a fire, cheer) are an audience, `"visitors"` in lamba.json, not 50 game seats: SDK reference, "Game seats or an audience", for the real limits. Details: docs UI (A Player's remote) and lamba.json (Settings for Players).
+4b. **Onboarding and tips, for the Host and every Player.** Every app teaches itself the first time, with the kit's
+   tour (`<script src="../../shell/sdk/tour.js">`, `LambaTour`, docs/sdk/SENSORS.md "First-time tour"):
+   - **Each person once.** The Host's tour on the Host's phone the first time they open the app (what their tiles do,
+     how to start, what the screen shows); each Player's tour on their own phone the first time that person joins
+     (their keys, the main action). `LambaTour.seen(key)` / `LambaTour.mark(key)` with one key per role
+     (`"<app>-host"`, `"<app>-player"`), so nobody sees it twice and a returning Player goes straight in.
+   - **Real actions tick it.** 3 to 5 steps of the app's own (`{ id, text, sub, svg }`), each ticked by doing the
+     real thing (`tour.done(id)` when the key is pressed or the move happens), never a Next button. A quiet Skip.
+   - **Never in the way.** A Player who joins mid-game gets the compact card on their own phone while the game goes on;
+     the screen shows a big step (practice content, like Air Slides' sample slides) only while nothing is happening
+     yet, and never pauses a game for one person.
+   - **Tips to come back to.** A small "Tips" that replays the tour: a key on the Player's remote, and a `"tips"`
+     action in lamba.json for the Host. The first time a mode or feature is used, one short tip line on that
+     phone (once, `Lamba.seen`). The listing's How to play says the same in a few lines.
+   - Real line drawings and plain words (two short lines a step), never clip art, emoji or a wall of text.
+     `lamba check` warns when no page loads tour.js (rule 21).
+4c. **Choosing is one step at a time, and fun.** A game never shows a setup page with many groups of options (players,
+   mode, layout, colours, finish, backdrop on one screen). Before play, at most three short steps on the phone, one
+   question each, in order: 2 to 4 big picture choices, the best one already picked, a row of dots and a Back, a tap
+   moves on by itself, and the last step is the one primary Ready or Start. Ask only what changes how the game plays
+   (how many play together, the mode); a Player picks only their own things (their colour or character, how they
+   control). Looks and extras (palettes, finishes, backdrops, layouts) are never asked before play: they have good
+   defaults, and the Host changes them later in the settings tiles (lamba.json), one group per tile. Nothing of the
+   choosing is on the screen (rule 3b): the screen shows who is in and who is ready.
 5. **Phone pages use Lamba's controls.** Build settings in lamba.json, never in phone.html (https://lamba.tv/devs/docs/ui/#phone-pages-use-lamba-s-controls). Every option a person picks (left or right hand, motion or camera, easy or hard, a mode or level) is a setting tile in the Settings tray (`"players": true` on its group when each Player picks their own), never a row of buttons on the remote. Game actions (Slice, Throw, Jump, Start) stay on the remote. No Send, Undo or Reset of your own, no sound, mute or music control (`forPlayers`), no − and + steppers, sliders or number boxes (a number setting: Lamba shows its dial), no title, profile or status at the top, no tabs, no grid of cards. `lamba check` refuses the first three and warns about the rest.
    Phone pages never zoom: the viewport meta says `user-scalable=no`.
 6. **Every view has its own address.** The host keeps the settings drawer's place in the address (`&g=&p=`): put
    settings in lamba.json groups, not in screens of your own. Keep the phone page one screen per view; what it
    shows comes from the screen's state, so a reload lands in the same place.
-7. **Two real clips** of the app before it is uploaded (the starter's placeholders are refused on upload):
-   `node lamba-clips.mjs <app>` records them.
+7. **Six or more real clips** of the app before it is uploaded (the starter's placeholders are refused on upload): the screen, the Host's phone, a Player's phone, the room together and two more moments, each with a role in lamba.json:
+   `node lamba-clips.mjs <app>` records them all in one run.
 8. **Motion and camera only through Lamba.** Declare `"motion"` or `"camera"` in `permissions`, call `Lamba.motion` (tilt, swing,
    shake) or `Lamba.track` (body, hands, face as landmarks and gesture names) from a phone page only, never `getUserMedia` or
    `devicemotion` yourself. Start from a tap, handle `"finger"`, `"denied"` and no camera with a touch way to play, offer front
    and back (`Lamba.track.cameras()`), and send the screen small messages with `Lamba.stream("name", 20, "tv")`, never whole frames (it goes straight over the Wi-Fi when it can and through the room when not; use `Lamba.send` for what must arrive, once). Ask `Lamba.track.start` only for what you use (`pose: false` for a hand game); `model` and `delegate` are left alone unless you know why.
    When the camera is how a Player plays (move a hand, the body), its view (`Lamba.track.preview(el)`) is the remote's hero: the biggest thing, front and centre, about half the phone or more, with at most a small key or two beside or below it. Never a thin strip above a big key the Player will not use; the camera or touch choice is a setting in the tray. `lamba-test` measures it.
+   **More than one way to play (camera, motion, touch): declare `"controls": { "ways": [...] }` in lamba.json and read `Lamba.playWith()`.** The Host's Play with is Any by default (each Player picks in their own tray) or one way for everyone; never a mode picker, a Tilt or Wave setting or a Camera key of your own.
    A game that aims at the screen with motion (a ring, a cursor) uses `Lamba.motion.start({ point: true })`, so the aim follows where the phone points like a remote; plain `tilt` is a marble on a tray (tip, not turn). When a Player picks Motion or Camera in the tray, start it at once and hide the touch pad; on failure one line with a Try again key, never a silent fall back to touch. On the screen, an aim marker disappears within a second of no news from that phone.
    An app that draws over a live camera picture on the screen (a glow, a ring) opens `Lamba.video.live({ from: "camera", under: true })`: Lamba draws the picture UNDER the page, the page is transparent where it draws nothing, and the page never gets a pixel. `own: true` keeps the Player's own remote while video is live (so the remote can be `Lamba.track.preview`); the page hears its own camera start with `Lamba.video.on("show")` from `"you"`. On the Host's phone, in a settings part, `Lamba.track.still()` gives a small still of the camera to mark things on, never to send on. When the Host's own phone IS the camera (prop it up, tap things in its picture), say `"hostCamera": true` in lamba.json: the Host's main view is phone.html in view `camera` (the camera big with `Lamba.track.preview(el, { under: true, nodes: false, fit: "contain" })`, `el` shaped like the picture, marks over it in the same box, one line and a flip key at the foot) and Lamba shows that camera live on the screen with no key to press; never a Camera tile, a Camera key to tap or a board shaped like the screen. Hands and video share one camera stream; use `audio: false` with hands.
    The camera picture never leaves the phone. The simulator makes up both sensors, so `node lamba-test.mjs` can run the game; to feel motion, open the simulator on a phone.
@@ -110,7 +140,7 @@ Types for every call: `lamba.d.ts`. Every field of lamba.json: `lamba.schema.jso
    Setting pictures look the same in every app. A line icon is written `{ "icon": "pictures/x.svg" }` (24 x 24, a 1.5 to 2 line, `currentColor`) and Lamba draws it in its own size, colour and weight; never a line icon as a plain picture (it gets your colour and thickness, edge to edge). A plain picture is a real scene made for the tile. One setting uses one kind for every choice, and "None" has no picture. `lamba check` warns.
    **The Host's phone is the live screen on top and ONE horizontal swiping row of tiles, nothing in between.** Every
    setting is a field of lamba.json, and every one tap thing the Host does (Feed, Tend the fire, New game) is an
-   action in lamba.json: `"actions": [{ "key": "tend", "label": "Tend the fire", "icon": "pictures/tend.svg" }]` (1 to 4,
+   action in lamba.json: `"actions": [{ "key": "tend", "label": "Tend the fire", "icon": "pictures/tend.svg" }]` (1 to 5,
    a one colour SVG each). The host shows them first in the row (or where a group `{ "action": "tend" }` puts them), a
    tap sends `{ type: "action", key }` to the screen page: `L.on("action", function (m) { if (m.key === "tend") ... })`
    (the copy on the Host's phone hears it too, at once). The screen page may change what a tile says with
@@ -276,15 +306,17 @@ Work in this order and do not skip a step:
    - Calm colours, strong contrast.
    - A Player is in with one tap: no forms, no accounts.
    - It runs on old screens, and the phone page never zooms.
-7. **Clips:** `node lamba-clips.mjs <app>` records 2 or 3 clips in the simulator, in the exact format, and lists
-   them in lamba.json. Look at each poster, and write captions that say what each clip shows. `--script steps.json`
+7. **Clips:** `node lamba-clips.mjs <app>` records 6 or 7 clips in one run in the simulator, in the exact format (start, screen, Host's phone, a Player's phone, room together, a later moment, and settings if the app has them), and lists
+   them in lamba.json with a role each (`[file, caption, role]`; 6 to 10 in all, every role the app has). Look at each poster and judge it: every clip shows something good happening (never a lobby, "Paused", an empty screen or a round nobody scores in), the Host's clip is the Host's real phone with a tile in use, and no two clips show the same moment; script the moments with `--script` (a step may be `{ "host": "css" }` for the Host's tiles). Write captions that say what each clip shows. `--script steps.json`
    plays a story: a list of steps, or `{ "setup": [...], "steps": [...], "once": true }` (a step is `{ "phone": "g1" | "owner", "tap": "css" }`
-   or `{ "wait": ms }`, and may carry `"upload": "file"` or `"text": "typed"`); `--main owner` records the Host's phone, `--players "A,B"`,
+   or `{ "wait": ms }`, and may carry `"upload": "file"` or `"text": "typed"`); `--kinds screen,host,...` records only those, `--players "A,B"`,
    `--host "C"` and `--guests N` set the people, `--name x --caption "..."` records one clip without touching lamba.json, and
    `--live scenario.mjs --base <local worker>` records against the real worker and remote (Lamba's own repository only; see ASSETS.md).
-   **Assets, then look at them yourself** (https://lamba.tv/devs/docs/assets/): `icon.svg` (a square SVG, the drawing inside the
-   middle 9 to 51 of 60, the rounded corners cut the rest), `card.svg` (exactly 320 x 180, anything that matters 12 units
-   in from the edges), and the 2 or 3 clips with their `-poster.webp` (540 x 920, H.264, 6 to 14 s, captions of at most 60
+   **Assets, then look at them yourself** (https://lamba.tv/devs/docs/assets/): `icon.svg` (a square SVG to the icon standard,
+   https://lamba.tv/devs/docs/assets/#the-icon-standard: a full-bleed gradient background, ONE descriptive scene that says what the
+   app does, soft light and shadow, 2 or 3 colours, no words or emoji, clear at 48 px and rich at 512 px; never a flat glyph on a plain
+   colour; look at it with `node lamba-icon.mjs --look <app>`), `card.svg` (exactly 320 x 180, anything that matters 12 units
+   in from the edges), and the 6 to 10 clips with their `-poster.webp` (540 x 920, H.264, 6 to 14 s, captions of at most 60
    characters). Lamba makes the link preview picture itself, and the app page shows clips, not screenshots: make nothing
    else, and never add a manifest field for a picture. Templates: `.claude/skills/lamba-tv-app/templates/`. Open the icon
    and card (render them), look at every poster, and say what you checked.
@@ -294,7 +326,8 @@ Work in this order and do not skip a step:
    `{ minQuality: 720 }`: it starts at 720 or more, and goes lower only on a screen measured too slow for it (a smooth
    lighter copy beats a jerky HD one). Keep the 720 and 360 copies and the pictures anyway. Never change a CSS `filter` on the
    film canvas every frame, and run spark loops only while something moves. Never patch shell/film.js or the SDK.
-8. **Upload** only when check, test and the checklist pass: `node lamba-check.mjs <app> --upload` (needs the connection: "Connect Lamba" below), or the
+8. **Upload a Draft, unasked,** as soon as check, test and the checklist pass, and again after every change that passes, so the
+   app always shows in the developer's portal as a Draft only they see: `node lamba-check.mjs <app> --upload` (needs the connection: "Connect Lamba" below), or the
    `lamba_upload` tool. Read the result and `lamba_status`.
 9. **Submit from the answers.** When the developer wants to submit: `lamba_listing`. Fill its gaps from the first
    answers and the app (write the texts yourself), and ask only what is still unknown (who made it: `lamba_profile`).
@@ -329,12 +362,13 @@ After every build or change that passes the check, end your message with a click
 
 <!-- Verified November 2026: Claude Code, claude mcp add --transport http + /mcp (code.claude.com/docs/en/mcp); Claude, Customize > Connectors > Add custom connector (support.claude.com/en/articles/11175166); Codex, codex mcp add --url + codex mcp login, IDE gear > MCP servers (learn.chatgpt.com/docs/extend/mcp, was developers.openai.com/codex/mcp); Codex cloud variables kept, secrets removed before the agent phase (learn.chatgpt.com/docs/environments/cloud-environment); ChatGPT developer mode (help.openai.com article 12584461, page blocked to fetch, labels from search summaries only). -->
 
-When the work reaches a step that needs Lamba (upload, submit, status), or the developer asks what is possible, say it
+As soon as the app passes the check with real clips (the upload is a step of every build, never optional), when
+the work needs Lamba (submit, status), or when the developer asks what is possible, say it
 in your own words, in one or two plain sentences: connecting Lamba lets you upload the app, send it for review and
 follow the review for them. It is one tap, and signing up is part of it. Never stop at "not connected", and never end
 your message with a step "pending": connect it yourself as below. A connector (Claude Code, the Claude app, Codex CLI or
-IDE, ChatGPT) changes their settings, so ask first and on yes set it up. In a chat AI (Codex cloud, a phone), do not
-ask: start the sign-in yourself. Not before: building, checking, testing, `--serve` and clips need no connection.
+IDE, ChatGPT) changes their settings, so ask first and on yes set it up. In a chat AI or an app builder (Codex cloud, Lovable,
+Bolt, v0, a phone), do not ask: start the sign-in yourself. Not before: building, checking, testing, `--serve` and clips need no connection.
 
 Pick the way that fits the tool you run in, and do every step you can yourself:
 

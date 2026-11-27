@@ -115,12 +115,13 @@
   },
   "clips": {
    "type": "array",
-   "minItems": 2,
-   "description": "At least 2 [file, caption]: clips/<file>.mp4 (540 x 920 H.264, 6 to 14 s) and clips/<file>-poster.webp",
+   "minItems": 6,
+   "maxItems": 10,
+   "description": "6 to 10 [file, caption, role]: clips/<file>.mp4 (540 x 920 H.264, 6 to 14 s) and clips/<file>-poster.webp. Between them the screen, the Host's phone, a Player's phone (an app with Players), the room together and two more real moments; the role (screen, host, player or together) may be left out when the file's name ends in it",
    "items": {
     "type": "array",
     "minItems": 2,
-    "maxItems": 2,
+    "maxItems": 3,
     "prefixItems": [
      {
       "type": "string",
@@ -131,6 +132,14 @@
       "maxLength": 60,
       "pattern": "^(?![\\s\\S]*[\\u2013\\u2014])(?![\\s\\S]*\\b[rR][aA][iI][nN][bB][oO][wW]\\b)[\\s\\S]*\\S[\\s\\S]*$",
       "description": "Words people read: at most 60 characters, no en or em dash"
+     },
+     {
+      "enum": [
+       "screen",
+       "host",
+       "player",
+       "together"
+      ]
      }
     ]
    }
@@ -280,6 +289,10 @@
   "guests": {
    "type": "boolean"
   },
+  "watch": {
+   "type": "boolean",
+   "description": "true: the Share drawer also offers Invite someone to watch, a link whose people only see the screen live (the slide, laser, drawings, the Host's face), with no keys and no controls; the Host sees them in the people list and can remove them. Needs guests true and the video permission"
+  },
   "askName": {
    "type": "boolean",
    "description": "true: a Player is asked their first name once (Lamba keeps it for every app) before the remote, and the app reads it (Lamba.me(), the players' names). Left out or false: a Player goes straight to the remote and the app sees \"Player 1\", \"Player 2\". Ask only if the app shows names (a multiplayer game, scores, turns). Needs guests true"
@@ -367,6 +380,36 @@
     ]
    },
    "description": "The tabs of the phone's app list it sits in: 1 to 3 of games, kids, friends, ambient, create, clocks, art, music, tools. Left out, they come from category and guests"
+  },
+  "controls": {
+   "type": "object",
+   "required": [
+    "ways"
+   ],
+   "additionalProperties": false,
+   "properties": {
+    "ways": {
+     "type": "array",
+     "minItems": 2,
+     "uniqueItems": true,
+     "items": {
+      "enum": [
+       "camera",
+       "motion",
+       "touch"
+      ]
+     }
+    },
+    "default": {
+     "enum": [
+      "any",
+      "camera",
+      "motion",
+      "touch"
+     ]
+    }
+   },
+   "description": "The ways a Player can play (two or more of camera, motion, touch). Lamba adds the Host's Play with (Any by default: each Player picks) and each Player's How I play; read Lamba.playWith(). Never a picker of your own."
   },
   "permissions": {
    "type": "array",
@@ -465,7 +508,7 @@
   "actions": {
    "type": "array",
    "minItems": 1,
-   "maxItems": 4,
+   "maxItems": 5,
    "description": "One tap tiles in the Host's drawer, first in the row unless a group { \"action\": key } places them. A tap sends { type: \"action\", key } to the screen page (Lamba.on(\"action\", fn))",
    "items": {
     "type": "object",
@@ -939,6 +982,10 @@
               },
               "presets": {
                "const": true
+              },
+              "row": {
+               "const": true,
+               "description": "a switch setting drawn as one row with a switch (the sheet's on and off rule), not as two picture tiles"
               }
              }
             },

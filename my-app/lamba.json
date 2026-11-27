@@ -8,7 +8,7 @@
  "icon": "icon.svg",
  "card": "card.svg",
  "tint": ["#2a6f8f", "#123c46"],
- "clips": [["my-app-tv", "What the screen shows"], ["my-app-phone", "What a phone does"]],
+ "clips": [["my-app-start", "How the room starts", "together"], ["my-app-tv", "What the screen shows", "screen"], ["my-app-phone", "What the Host does", "host"], ["my-app-player", "What a Player does", "player"], ["my-app-together", "The room together", "together"], ["my-app-moment", "A later moment", "screen"]],
  "page": {
   "facts": [["Players", "Up to 4", "each on their own phone"]],
   "about": [{ "h": "What it is", "p": "Say in a few calm sentences what your app is for and who it is for." }]

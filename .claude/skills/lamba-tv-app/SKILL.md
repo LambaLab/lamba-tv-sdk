@@ -38,11 +38,11 @@ download is the last resort, only if every way to connect fails, and then you ex
 4. **Write lamba.json first**: name (24), sub (40), about (80), `guests` and `players`, `permissions` (only what
    it uses), `outside` (empty unless needed), settings `fields` and `groups` with `{ "host": "frame" }`,
    `{ "host": "mat" }` and `{ "host": "brightness" }` each once.
-5. **Write tv.html** in ES5 (var, function, no arrow functions, no `?.` or `??`), from the screen pattern.
-6. **Write phone.html** (Build settings in lamba.json, never in phone.html: https://lamba.tv/devs/docs/ui/#phone-pages-use-lamba-s-controls) from the remote pattern (references/patterns.md): for an app Players join, the Player's remote in
+5. **Write tv.html** in ES5 (var, function, no arrow functions, no `?.` or `??`), from the screen pattern. The screen is only watched: no controls, sound icon, mode switch, QR code or join code on it (AGENTS.md rule 3b); every control lives on the phones.
+6. **Write phone.html** (Build settings in lamba.json, never in phone.html: https://lamba.tv/devs/docs/ui/#phone-pages-use-lamba-s-controls) from the remote pattern (references/patterns.md): for an app Players join, the Player's remote in Add the first-time tour for the Host and for Players, and a Tips key (AGENTS.md rule 4b). Any choosing before play is one question per step, three steps at most (rule 4c).
    view `guest`, the whole phone, a full screen, realistic remote made for this app (`.l-remote`, `.l-well`, `.l-key.l-big`,
    `LambaUI.press`), one main action, low, never scrolling, `user-scalable=no`. No name step on your page. Ask for names only if the app shows them (`"askName": true` in lamba.json; Lamba's join asks once and you read
-   `Lamba.me()`), no clip art, no emoji. The Player's remote is full screen and visual: pictures for choices (mark the groups Players may change with "players": true in lamba.json, and Lamba shows them the Host's picture tiles), and a visible sound control when the app has sound (add "forPlayers": ["sound"] to lamba.json for Lamba's own Sound tile; also "brightness", "frame", "effects" (cracks, lines, flies: never a scare) and "schedule" (Players only see it, the Host alone changes it), each off until the Host switches it on). For background music, never ship your own files: add "music": true to lamba.json (and "music" to forPlayers to share it) and Lamba plays its own library on the screen, with a Music tile for the Host. No decorative status text or stray icons at the top, no hold to act gestures, and options big enough for a thumb (44 px or more). The Host's phone is the live screen on top (a camera app whose Host's phone is the camera: "hostCamera": true and phone.html view "camera" instead) and ONE row of tiles from lamba.json,
+   `Lamba.me()`), no clip art, no emoji. More than one way to play (camera, motion, touch): `"controls": { "ways": [...] }` in lamba.json and `Lamba.playWith()`, never a picker of your own (the Host's Play with is Any by default, each Player picks in their tray). The Player's remote is full screen and visual: pictures for choices (mark the groups Players may change with "players": true in lamba.json, and Lamba shows them the Host's picture tiles), and a visible sound control when the app has sound (add "forPlayers": ["sound"] to lamba.json for Lamba's own Sound tile; also "brightness", "frame", "effects" (cracks, lines, flies: never a scare) and "schedule" (Players only see it, the Host alone changes it), each off until the Host switches it on). For background music, never ship your own files: add "music": true to lamba.json (and "music" to forPlayers to share it) and Lamba plays its own library on the screen, with a Music tile for the Host. No decorative status text or stray icons at the top, no hold to act gestures, and options big enough for a thumb (44 px or more). The Host's phone is the live screen on top (a camera app whose Host's phone is the camera: "hostCamera": true and phone.html view "camera" instead) and ONE row of tiles from lamba.json,
    nothing in between: settings are fields, one tap things are `actions` (heard with `L.on("action")`). There is no
    controller view.
 7. **Check:** `node lamba-check.mjs <app>` until it says "is ready to upload".
@@ -56,18 +56,22 @@ download is the last resort, only if every way to connect fails, and then you ex
 9. **Clips.** The starter's clips are placeholders, and an upload with them is refused. Run
    `node lamba-clips.mjs <app>`: it plays the app in the simulator (random taps, or `--script steps.json` for a
    session that shows it at its best; the script is a list of steps or `{ setup, steps, once }`, a step may carry `upload` or `text`;
-   `--main owner` records the Host's phone, `--name` and `--caption` record one clip, `--players` and `--host` name the people;
-   `--live scenario.mjs --base <local worker>` records against the real room, only inside Lamba's own repository) and writes 2 or 3 clips in the exact format, listed in lamba.json. Look at
-   each `-poster.webp`, and write captions that say what each clip shows. Never draw, generate or reuse clips that
+   `--kinds` records only some of them, `--name` and `--caption` record one clip, `--players` and `--host` name the people;
+   `--live scenario.mjs --base <local worker>` records against the real room, only inside Lamba's own repository) and writes 6 or 7 clips in one run in the exact format (the screen, the Host's phone, a Player's phone, the room together and more moments), listed in lamba.json with a role each: 6 to 10 are needed. Look at
+   each `-poster.webp` and judge it (something good happens in every clip, no lobby, "Paused" or empty screen, no two alike; the Host's clip shows the Host's phone with a tile in use; script moments with `--script`, a step `{ "host": "css" }` taps the Host's tiles), and write captions that say what each clip shows. Never draw, generate or reuse clips that
    don't show this app.
-10. **Assets, then look at them.** Make `icon.svg` (square; the drawing inside 9 to 51 of 60), `card.svg` (exactly
+10. **Assets, then look at them.** Make `icon.svg` to the icon standard ([assets](https://lamba.tv/devs/docs/assets/#the-icon-standard)):
+    a full-bleed gradient background, ONE descriptive scene that says what the app does, soft light and shadow, 2 or 3
+    colours, no words or emoji, important parts in the middle 80%; draw it in the template's layers, then
+    `node lamba-icon.mjs --look <app>` and judge it at 48 px as a picky designer (redo it if you cannot tell what the app does). Then `card.svg` (exactly
     320 x 180; what matters 12 units in from the edges), and the clips with posters (540 x 920, H.264, 6 to 14 s,
     captions of 60 characters or less). Templates: `templates/` here. Render or open each file and each poster, and say what you
     checked. Nothing else is asked for: Lamba draws the link preview, the app page shows clips and no screenshots, and
     no manifest field takes another picture ([assets](https://lamba.tv/devs/docs/assets/)). A looping scene: `node lamba-film.mjs
     <video> --name <name> --out <app>/films` ([films](https://lamba.tv/devs/docs/films/)). Art apps fill the screen edge to edge
     (hard rule 12 in AGENTS.md).
-11. **Upload** when the developer wants: `node lamba-check.mjs <app> --upload` (after "Connect Lamba", below) or
+11. **Upload a Draft, unasked,** once the check passes, and after every change that passes (it shows in the developer's
+    portal, only to them): `node lamba-check.mjs <app> --upload` (after "Connect Lamba", below) or
     `lamba_upload`. Then `lamba_status`. Submit only when the developer asks: `lamba_listing`, fill its gaps from the
     first answers, ask only what is still unknown, then `lamba_submit` (private: `lamba_private`, `lamba_make_live`).
 12. **The listing later:** words, How to play, clips and pictures change with `lamba_edit_listing`, no new version and no
@@ -98,12 +102,13 @@ After every build or change that passes the check, end your message with a click
 
 <!-- Verified November 2026: Claude Code, claude mcp add --transport http + /mcp (code.claude.com/docs/en/mcp); Claude, Customize > Connectors > Add custom connector (support.claude.com/en/articles/11175166); Codex, codex mcp add --url + codex mcp login, IDE gear > MCP servers (learn.chatgpt.com/docs/extend/mcp, was developers.openai.com/codex/mcp); Codex cloud variables kept, secrets removed before the agent phase (learn.chatgpt.com/docs/environments/cloud-environment); ChatGPT developer mode (help.openai.com article 12584461, page blocked to fetch, labels from search summaries only). -->
 
-When the work reaches a step that needs Lamba (upload, submit, status), or the developer asks what is possible, say it
+As soon as the app passes the check with real clips (the upload is a step of every build, never optional), when
+the work needs Lamba (submit, status), or when the developer asks what is possible, say it
 in your own words, in one or two plain sentences: connecting Lamba lets you upload the app, send it for review and
 follow the review for them. It is one tap, and signing up is part of it. Never stop at "not connected", and never end
 your message with a step "pending": connect it yourself as below. A connector (Claude Code, the Claude app, Codex CLI or
-IDE, ChatGPT) changes their settings, so ask first and on yes set it up. In a chat AI (Codex cloud, a phone), do not
-ask: start the sign-in yourself. Not before: building, checking, testing, `--serve` and clips need no connection.
+IDE, ChatGPT) changes their settings, so ask first and on yes set it up. In a chat AI or an app builder (Codex cloud, Lovable,
+Bolt, v0, a phone), do not ask: start the sign-in yourself. Not before: building, checking, testing, `--serve` and clips need no connection.
 
 Pick the way that fits the tool you run in, and do every step you can yourself:
 
@@ -170,6 +175,6 @@ the test said, and what the developer still has to do (connecting Lamba, submitt
 - [references/patterns.md](references/patterns.md): the screen page, the phone page, Players and seats, settings,
   saved data, sound, motion and camera, the remote's OK, with code to copy
 - [references/review.md](references/review.md): the review checklist
-- `templates/icon-template.svg`, `templates/card-template.svg`: the icon and card with their safe areas drawn
+- `templates/icon-template.svg`: an icon to the icon standard, drawn in commented layers; `templates/card-template.svg`: the card with its safe area drawn
 - `templates/phone-viewports.test.mjs`: the Host's and a Player's phone in WebKit at iPhone sizes, upright and sideways, sheet up
   and down; checks 44 px targets, equal keys, no scrolling and nothing moving under a finger. Copy it next to `lamba-test.mjs`

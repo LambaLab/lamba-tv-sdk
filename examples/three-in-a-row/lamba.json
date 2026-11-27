@@ -13,12 +13,34 @@
  ],
  "clips": [
   [
-   "three-in-a-row-board",
-   "The board on the screen"
+   "three-in-a-row-start",
+   "Alex Morgan takes three in a row and wins",
+   "together"
   ],
   [
-   "three-in-a-row-phone",
-   "Your turn, on your phone"
+   "three-in-a-row-screen",
+   "A new game: Jamie Parker's turn, the board fills",
+   "screen"
+  ],
+  [
+   "three-in-a-row-player",
+   "A Player's phone: tap a square on your turn",
+   "player"
+  ],
+  [
+   "three-in-a-row-together",
+   "Every move shows on the screen at once",
+   "together"
+  ],
+  [
+   "three-in-a-row-moment",
+   "Round two: the score says 1 to 0",
+   "screen"
+  ],
+  [
+   "three-in-a-row-host",
+   "The Host picks Paper, the board changes",
+   "host"
   ]
  ],
  "page": {

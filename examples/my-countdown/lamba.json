@@ -13,16 +13,34 @@
  ],
  "clips": [
   [
-   "countdown-presets",
-   "One tap: 3, 10 or 60 minutes"
+   "countdown-start",
+   "Start: the ring runs, the tiles wait on the phone",
+   "together"
   ],
   [
-   "countdown-end",
-   "The last ten seconds, then a glow"
+   "countdown-screen",
+   "The ring counts down on the screen",
+   "screen"
   ],
   [
-   "countdown-more",
-   "A minute more, whenever you like"
+   "countdown-together",
+   "The phone's tiles, the screen's countdown",
+   "together"
+  ],
+  [
+   "countdown-moment",
+   "One tap adds a minute, the ring keeps going",
+   "screen"
+  ],
+  [
+   "countdown-later",
+   "Later still",
+   "screen"
+  ],
+  [
+   "countdown-host",
+   "The Host picks a look, the screen changes",
+   "host"
   ]
  ],
  "page": {

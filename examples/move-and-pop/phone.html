@@ -75,13 +75,17 @@
       });
       session.ready.then(function () { press("go", true); say("Wave at the camera"); }, function (e) { session = null; say(/denied/.test(e.message) ? "The camera is off for this app" : "No camera here"); });
     }
-    // one main action: starts, or stops, the way chosen in the Control setting
+    // one main action: starts, or stops, the way this Player plays (lamba.json "controls": the Host's Play with, Any by default, else
+    // the Player's own How I play; Lamba.playWith() says which, and Lamba draws both tiles)
     // (LambaUI.press: the key goes down under the finger with a tap of the phone; an iPhone asks for motion from this tap)
     LambaUI.press(document.getElementById("go"), function () {
       var on = document.getElementById("go").getAttribute("aria-pressed") === "true";
       if (on) { stopWave(); stopTilt(); say(""); return; }
-      if (L.settings.control === "wave") startWave(); else startTilt();
+      if (L.playWith() === "camera") startWave(); else startTilt();
     });
+    // the way changed (the Host set one way for everyone, or this Player picked another): stop the old one, the next Start uses the new one
+    var way = L.playWith();
+    L.onSettings(function () { var w = L.playWith(); if (w === way) return; way = w; stopWave(); stopTilt(); say(w === "camera" ? "Tap Start, then wave at the camera" : "Tap Start, then tip your phone"); });
     // front and back, when this phone has both
     L.track.cameras().then(function (c) { if (c.kind === "flip") { var b = document.getElementById("flip"); b.hidden = false; b.onclick = function () { if (session) session.switchCamera(); }; } }, function () {});
   });

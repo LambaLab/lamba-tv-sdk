@@ -173,12 +173,34 @@
  "category": "art",
  "clips": [
   [
+   "fireside-start",
+   "How the room starts",
+   "together"
+  ],
+  [
    "fireside-tv",
-   "What the screen shows"
+   "What the screen shows",
+   "screen"
   ],
   [
    "fireside-phone",
-   "What a phone does"
+   "What the Host does",
+   "host"
+  ],
+  [
+   "fireside-player",
+   "What a Player does",
+   "player"
+  ],
+  [
+   "fireside-together",
+   "The room together",
+   "together"
+  ],
+  [
+   "fireside-moment",
+   "A later moment",
+   "screen"
   ]
  ]
 }

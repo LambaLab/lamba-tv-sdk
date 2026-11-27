@@ -31,15 +31,18 @@ Make it great
 - Light. It opens fast, even on an older screen. No video, no big libraries.
 - The Host's phone is Lamba's own: the live screen on top and one row of tiles (the settings, and one tap actions from lamba.json), nothing in between.
 - Players get a real remote: phone.html in view "guest", the whole phone, high quality and realistic, made for this app. One big main action, low, easy with one thumb, a press you can feel. No scrolling. It never repeats the screen.
-- Onboarding for Players, if any, is short and real: real pictures of the app or the screen, plain words, never clip art or emoji. Lamba's join comes first: never ask for a name.
+- Onboarding for the Host and every Player, each once: a short first-time tour of the real actions (the kit's LambaTour), each step ticked when they really do it, a quiet Skip, and a Tips key to replay it; one short tip the first time a mode is used. Real pictures and plain words, never clip art or emoji. Lamba's join comes first: never ask for a name.
+- Choosing is one step at a time, and fun: never a setup page full of options. At most three short steps on the phone, one question each with 2 to 4 big picture choices and the best one already picked, then Ready. Only what changes how the game plays; looks and extras keep good defaults and live in the Host's settings tiles for later.
 - Readable from across the room: big words, calm colours, one bright accent.
+- The screen is only watched. No controls on it: no buttons, mode switches or sound icon, and no QR code, join code or PIN of your own. Lamba shows how to join and gives the sound control; every control lives on the phones.
 - A Player is in with one tap. No forms, no sign up.
 
 How to build it
 1. Before any code, ask me in one short message, with your suggestions: who it's for (everyone, families or made for kids), public on Lamba or private to my organization, its name, and whether Players join from their phones and how many.
 2. Get the Lamba TV SDK from github.com/LambaLab/lamba-tv-sdk (its README: starter.zip into its own folder, lamba-app/) and follow its AGENTS.md and the lamba-tv-app skill.
-3. Run the check and the self-test, look at every screenshot and go through the design checklist. Fix everything until they all pass. Then record its clips with lamba-clips.mjs.
-4. Then tell me in one sentence what you built and how I can try it. I'm not technical: guide me through every step in plain words and do every step you can yourself. If Lamba isn't connected yet, connect it yourself as the kit's AGENTS.md says (in a chat, end your message with the link I tap to approve), and upload it for me. Never leave me with a zip to upload myself unless every way to connect fails.
+3. Run the check and the self-test, look at every screenshot and go through the design checklist. Fix everything until they all pass. Then record its 6 or more clips (every role) with lamba-clips.mjs.
+4. Upload it to my Lamba account yourself, without asking, so it shows in my developer portal as a Draft only I can see, and again after every change that passes. If Lamba isn't connected yet, connect it yourself as the kit's AGENTS.md says (in a chat, end your message with the link I tap to approve, and upload on my next message). Never leave me with a zip to upload myself unless every way to connect fails.
+5. Then tell me in one sentence what you built, how I can try it, and that it is in my portal. I'm not technical: guide me through every step in plain words and do every step you can yourself.
 ```
 
 </details>

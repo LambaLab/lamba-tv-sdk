@@ -1,1 +1,24 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 60"><defs><linearGradient id="hi" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5fd0b0"/><stop offset="1" stop-color="#2a6f8f"/></linearGradient></defs><rect width="60" height="60" fill="url(#hi)"/><path d="M22 38c-4-4-6-9-5-12 1-2 3-2 4 0l3 5V17c0-2 3-2 3 0v11-14c0-2 3-2 3 0v14-12c0-2 3-2 3 0v13-9c0-2 3-2 3 0v13c0 7-4 12-10 12-3 0-5-1-7-3z" fill="#fff"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 120 120">
+<defs>
+<linearGradient id="bg" x1="0" y1="0" x2=".8" y2="1"><stop offset="0" stop-color="#7fe0c4"/><stop offset=".5" stop-color="#3fa3a0"/><stop offset="1" stop-color="#1f5873"/></linearGradient>
+<linearGradient id="scr" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1c3f55"/><stop offset="1" stop-color="#0f2433"/></linearGradient>
+<linearGradient id="hd" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#d7efe9"/></linearGradient>
+<linearGradient id="ph" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#cfe4e2"/></linearGradient>
+<filter id="s3" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="3"/></filter>
+<filter id="s8" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="8"/></filter>
+<path id="h" d="M22 38c-4-4-6-9-5-12 1-2 3-2 4 0l3 5V17c0-2 3-2 3 0v11-14c0-2 3-2 3 0v14-12c0-2 3-2 3 0v13-9c0-2 3-2 3 0v13c0 7-4 12-10 12-3 0-5-1-7-3z"/>
+</defs>
+<rect width="120" height="120" fill="url(#bg)"/>
+<rect x="14" y="16" width="86" height="60" rx="8" fill="#0b2230" opacity=".5" filter="url(#s3)" transform="translate(2 6)"/>
+<rect x="14" y="16" width="86" height="60" rx="8" fill="#0d1f2b"/>
+<rect x="17.5" y="19.5" width="79" height="53" rx="5" fill="url(#scr)"/>
+<ellipse cx="60" cy="44" rx="30" ry="22" fill="#7fe0c4" opacity=".35" filter="url(#s8)"/>
+<g transform="translate(39 15) scale(1.05) rotate(-12 30 30)"><use xlink:href="#h" fill="url(#hd)"/></g>
+<g fill="none" stroke="#bff3e4" stroke-width="2.6" stroke-linecap="round" opacity=".85"><path d="M77 30a13 13 0 0 1 4 12"/><path d="M83 26a20 20 0 0 1 6 18" opacity=".6"/></g>
+<g transform="rotate(-14 30 92)">
+<rect x="17" y="70" width="27" height="44" rx="6.5" fill="#0b2230" opacity=".55" filter="url(#s3)" transform="translate(2 4)"/>
+<rect x="17" y="70" width="27" height="44" rx="6.5" fill="url(#ph)"/>
+<rect x="20" y="74" width="21" height="36" rx="3.5" fill="#1c3f55"/>
+<g transform="translate(19.6 77.5) scale(.5) rotate(-12 30 30)"><use xlink:href="#h" fill="#7fe0c4"/></g>
+</g>
+</svg>

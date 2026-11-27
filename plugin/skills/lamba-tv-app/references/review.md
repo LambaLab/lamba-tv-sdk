@@ -27,7 +27,7 @@ https://lamba.tv/devs/docs/design/.
 
 - [ ] `node lamba-check.mjs <app>` says "is ready to upload".
 - [ ] lamba.json: id equals the folder's name; name 24, sub 40, about 80 characters at most.
-- [ ] Two clips listed in lamba.json `clips`, each `clips/<name>.mp4` and `clips/<name>-poster.webp`, real ones.
+- [ ] Six to ten clips listed in lamba.json `clips` (a role each, every role the app has), each `clips/<name>.mp4` and `clips/<name>-poster.webp`, real ones.
 - [ ] screen pages: ES5 that Chrome 61 parses; no `<video>`, `<audio>`, `new Audio`, `createElement("video")`.
 - [ ] Every page loads `../../shell/sdk/lamba.js`; only own files, `../../shell/sdk/` and Google Fonts through `Lamba.fonts` or `/fonts/css2` (never a Google address).
 - [ ] No address outside Lamba unless in `outside`; no WebSocket, EventSource, sendBeacon; no browser storage.

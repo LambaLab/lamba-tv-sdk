@@ -6023,6 +6023,20 @@ const M_rules = (() => {
 //   checkRules(manifest, { has: path => true | false, folder: "countdown" })   // problems: [] when it is right
 // dir: what is in the app's folder (has), and the folder's name (folder: left out when the name does not matter, as in an
 // uploaded zip). Without dir only the manifest itself is checked.
+// the clips on an app's page: 6 to 10, each showing one role. [file, caption] (older apps) still works: the role is read from the file's name
+const CLIPS_MIN = 6, CLIPS_MAX = 10;
+const CLIP_ROLES = ["screen", "host", "player", "together"];
+const ROLE_WORDS = { screen: "the screen on its own", host: "the Host's phone", player: "a Player's phone", together: "the room together (the screen with a phone)" };
+const ROLE_NAMES = { screen: "Screen", host: "Host", player: "Player", together: "Together" };
+const clipRole = (c, guests) => {
+  if (Array.isArray(c) && CLIP_ROLES.includes(c[2])) return c[2];
+  const n = Array.isArray(c) ? String(c[0]) : "", e = (n.match(/-(screen|host|player|together|play|phone|settings|tv|board|moment)$/) || [])[1];
+  return e === "screen" || e === "tv" || e === "board" || e === "moment" ? "screen" : e === "host" || e === "settings" ? "host" : e === "player" ? "player" : e === "together" || e === "play" ? "together" : e === "phone" ? (guests ? "player" : "host") : "";
+};
+const clipRolesMissing = m => {
+  const have = new Set((m.clips || []).map(c => clipRole(c, m.guests === true))), need = ["screen", "host", "together"].concat(m.guests === true ? ["player"] : []);
+  return need.filter(r => !have.has(r));
+};
 const MANIFEST_VERSION = 1;
 const ID = /^[a-z][a-z0-9-]{1,23}$/;
 const KEY = /^[a-z][A-Za-z0-9]{0,23}$/;                  // a setting's key (kept in the saved settings)
@@ -6059,6 +6073,47 @@ const HOST_PARTS = ["frame", "mat", "brightness"];
 // the drawer's tiles the host draws itself, so no group of the app may take their key (or their address, &g=): its frame,
 // mat and brightness, "Try as a player" (guest), "Scribble", "Effects", "Schedule", "Who's waiting" (line), the visitors' settings and
 // "Players" (playerctl: the Host's switch for letting Players change the groups marked "players": true)
+// ---- How Players play: camera, motion or touch (Nagi, 2026-11-26; docs/sdk/SENSORS.md "Who picks the way to play") ----
+// "controls": { "ways": ["camera", "motion", "touch"], "default": "any" } in lamba.json gives the app two settings, made here (never typed in):
+//   playWith  the Host's tile "Play with": "any" (the default: each Player picks on their own phone) or one of the ways, for every Player
+//   myWay     each Player's own tile "How I play" (a group with "players": "own"), shown on their phone only while the Host says "any"
+// Read it with Lamba.playWith() (a phone: this Player's way; the screen: Lamba.playWith(entry) for each Player). Never a picker of your own.
+const CONTROL_WAYS = ["camera", "motion", "touch"];
+const CONTROL_KEYS = { host: "playWith", own: "myWay", hostGroup: "playwith", ownGroup: "myway" };
+const WAY_WORDS = { any: ["Any", "Each Player picks on their own phone"], camera: ["Camera", "Move in front of the phone's camera"], motion: ["Motion", "Tilt, turn or swing the phone"], touch: ["Touch", "Tap and slide on the phone"] };
+const waysOf = m => !!m && m.controls && typeof m.controls === "object" && Array.isArray(m.controls.ways) ? m.controls.ways.filter((w, i, a) => CONTROL_WAYS.includes(w) && a.indexOf(w) === i) : [];
+function withControls(m) {
+  const ways = waysOf(m);
+  if (ways.length < 2 || m.controls.made === true) return m;   // (made: already done, so this may run twice)
+  const out = JSON.parse(JSON.stringify(m)), K = CONTROL_KEYS, def = m.controls.default === undefined ? "any" : m.controls.default;
+  out.controls = Object.assign({}, m.controls, { ways, made: true });
+  out.settings = out.settings && typeof out.settings === "object" ? out.settings : { fields: {}, groups: [] };
+  out.settings.fields = out.settings.fields || {}; out.settings.groups = Array.isArray(out.settings.groups) ? out.settings.groups : [];
+  const choice = id => ({ id, name: WAY_WORDS[id][0], sub: WAY_WORDS[id][1], short: WAY_WORDS[id][0], picture: { text: WAY_WORDS[id][0] } });
+  if (!out.settings.fields[K.host]) out.settings.fields[K.host] = { type: "choice", default: def === "any" || ways.includes(def) ? def : "any", choices: ["any"].concat(ways).map(choice) };
+  if (!out.settings.fields[K.own]) out.settings.fields[K.own] = { type: "choice", default: ways[0], choices: ways.map(choice) };
+  const at = out.settings.groups.findIndex(g => g && (g.host !== undefined || g.action !== undefined)), i = at < 0 ? out.settings.groups.length : at;
+  out.settings.groups.splice(i, 0, { key: K.hostGroup, label: "Play with", icon: { choice: true }, parts: [{ setting: K.host, label: "Play with" }] }, { key: K.ownGroup, label: "How I play", icon: { choice: true }, players: "own", parts: [{ setting: K.own, label: "How I play" }] });
+  return out;
+}
+function checkControls(m, say) {
+  if (m.controls === undefined) return;
+  const c = m.controls, K = CONTROL_KEYS;
+  if (!c || typeof c !== "object" || Array.isArray(c) || !Array.isArray(c.ways)) { say("controls must be { \"ways\": [...] } with two or more of " + CONTROL_WAYS.join(", ")); return; }
+  c.ways.forEach(w => { if (!CONTROL_WAYS.includes(w)) say("controls.ways: " + JSON.stringify(w) + " is not one of " + CONTROL_WAYS.join(", ")); });
+  const ways = waysOf(m);
+  if (ways.length !== c.ways.length) say("controls.ways lists a way twice or one that is not " + CONTROL_WAYS.join(", "));
+  if (ways.length < 2) say("controls.ways needs two or more ways (with one way there is nothing to pick: leave controls out)");
+  if (c.default !== undefined && c.default !== "any" && !ways.includes(c.default)) say("controls.default must be \"any\" (each Player picks, the default) or one of controls.ways");
+  const pm = Array.isArray(m.permissions) ? m.permissions : [];
+  if (ways.includes("camera") && !pm.includes("camera")) say("controls.ways has camera, so permissions needs \"camera\"");
+  if (ways.includes("motion") && !pm.includes("motion")) say("controls.ways has motion, so permissions needs \"motion\"");
+  if (m.guests !== true) say("controls needs guests true (each Player picks on their own phone)");
+  if (c.made === true) return;
+  const F = (m.settings && m.settings.fields) || {}, G = (m.settings && Array.isArray(m.settings.groups) ? m.settings.groups : []);
+  [K.host, K.own].forEach(k => { if (F[k]) say("settings.fields." + k + " is made by Lamba from controls: remove it"); });
+  [K.hostGroup, K.ownGroup].forEach(k => { if (G.some(g => g && g.key === k)) say("settings.groups: " + k + " is made by Lamba from controls: remove it"); });
+}
 const HOST_GROUPS = ["frame", "mat", "bright", "guest", "scribble", "effects", "schedule", "line", "visitors", "playerctl"];
 const ASPECT = /^([1-9]\d?):([1-9]\d?)$/;
 const PICTURE_FILE = /^[a-z0-9][a-z0-9_./-]{0,80}\.(svg|png|webp|jpg|jpeg)$/i;
@@ -6082,14 +6137,21 @@ function checkRules(m, dir) {
   if (m.icon && !/\.svg$/i.test(m.icon)) say("icon must be an SVG file");
   file(m.card, "card", true);
   if (m.tint !== undefined && !((typeof m.tint === "string" && HEX.test(m.tint)) || (Array.isArray(m.tint) && m.tint.length === 2 && m.tint.every(c => typeof c === "string" && HEX.test(c))))) say("tint must be a colour (#rrggbb) or two of them");
-  // the moving clips on the app's page: [file, caption], clips/<file>.mp4 and clips/<file>-poster.webp
+  // the moving clips on the app's page: [file, caption] or [file, caption, role], clips/<file>.mp4 and clips/<file>-poster.webp.
+  // 6 to 10, and between them every role the app has: the screen, the Host's phone, a Player's phone (an app with Players), the room together, plus more real moments
   if (m.clips === undefined && m.stagingOnly === true) { /* an app still on staging: clips come before it is published */ }
-  else if (!Array.isArray(m.clips) || m.clips.length < 2) say("clips: at least 2 [file, caption] (design rules: Clips, node lamba-clips.mjs)");
-  else m.clips.forEach((c, i) => {
-    if (!Array.isArray(c) || c.length !== 2 || typeof c[0] !== "string" || !/^[a-z0-9-]{1,60}$/.test(c[0]) || typeof c[1] !== "string") { say("clips[" + i + "] must be [\"file-name\", \"caption\"]"); return; }
-    str(c[1], 60, "clips[" + i + "] caption");
-    if (dir) for (const f of ["clips/" + c[0] + ".mp4", "clips/" + c[0] + "-poster.webp"]) if (!dir.has(f)) say("clip file " + f + " is missing");
-  });
+  else if (!Array.isArray(m.clips) || m.clips.length < CLIPS_MIN) say("clips: at least " + CLIPS_MIN + " [file, caption, role] (the screen, the Host's phone, a Player's phone and the room together; design rules: Clips, node lamba-clips.mjs)");
+  else if (m.clips.length > CLIPS_MAX) say("clips: at most " + CLIPS_MAX);
+  else {
+    m.clips.forEach((c, i) => {
+      if (!Array.isArray(c) || c.length < 2 || c.length > 3 || typeof c[0] !== "string" || !/^[a-z0-9-]{1,60}$/.test(c[0]) || typeof c[1] !== "string") { say("clips[" + i + "] must be [\"file-name\", \"caption\"] or [\"file-name\", \"caption\", \"role\"]"); return; }
+      if (c.length === 3 && !CLIP_ROLES.includes(c[2])) say("clips[" + i + "] role must be one of " + CLIP_ROLES.join(", "));
+      str(c[1], 60, "clips[" + i + "] caption");
+      if (dir) for (const f of ["clips/" + c[0] + ".mp4", "clips/" + c[0] + "-poster.webp"]) if (!dir.has(f)) say("clip file " + f + " is missing");
+    });
+    const miss = clipRolesMissing(m);
+    if (miss.length) say("clips: no clip shows " + miss.map(r => ROLE_WORDS[r]).join(" or ") + " yet (add one, role \"" + miss.join("\" or \"") + "\"): the page shows every part of the app");
+  }
   // the app's page on the start page: facts and a longer description
   const page = m.page || {};
   if (page.facts !== undefined) { if (!Array.isArray(page.facts) || page.facts.length > 6) say("page.facts: at most 6 [label, value, small]"); else page.facts.forEach((f, i) => { if (!Array.isArray(f) || f.length < 2 || f.length > 3) say("page.facts[" + i + "] must be [label, value, small]"); else f.forEach((t, j) => str(t, 60, "page.facts[" + i + "][" + j + "]")); }); }
@@ -6108,6 +6170,7 @@ function checkRules(m, dir) {
   const pl = m.players === undefined ? { min: 0, max: 0 } : m.players && typeof m.players === "object" ? m.players : {};
   if (!Number.isInteger(pl.min) || !Number.isInteger(pl.max) || pl.min < 0 || pl.max > 50 || pl.min > pl.max) say("players must be { min, max }, whole numbers, 0 to 50, min at most max");
   if (typeof m.guests !== "boolean") say("guests must be true or false");
+  if (m.watch !== undefined) { if (typeof m.watch !== "boolean") say("watch must be true or false"); else if (m.watch && (m.guests !== true || !(m.permissions || []).includes("video"))) say("watch offers Invite someone to watch (people who only see the screen's slides, no controls): it needs guests true and the video permission"); }
   if (m.askName !== undefined) { if (typeof m.askName !== "boolean") say("askName must be true or false"); else if (m.askName && m.guests !== true) say("askName asks a Player their name when they join: it needs guests true"); }
   // visitors: more people than the seats, who send a little and never wait (worker/sdk.js sdkVisMax, sdkVisRate)
   const vi = m.visitors;
@@ -6165,7 +6228,8 @@ function checkRules(m, dir) {
     else if (m.inside && m.inside.by && m.inside.pictures && typeof m.inside.pictures === "object") Object.keys(m.inside.pictures).forEach(k => file(m.inside.pictures[k], "inside.pictures." + k));
     else say("inside must be a picture file or { by: <setting>, pictures: { choice: file } }");
   }
-  checkSettings(m, dir, say, str, file);
+  checkControls(m, say);
+  checkSettings(withControls(m), dir, say, str, file);
   checkMoney(m, say, str);
   return P;
 }
@@ -6259,7 +6323,7 @@ function checkMoney(m, say, str) {
   if (Array.isArray(m.outside)) m.outside.forEach(o => { const h = String(o || "").replace(/^https:\/\//i, "").replace(/:\d+$/, ""); if (PAY_HOSTS.test(h)) say("outside: " + o + " takes payments; Lamba sells for every app (price, subscription, products and Lamba.buy)"); });
 }
 
-const ACTIONS_MAX = 4;
+const ACTIONS_MAX = 5;
 function checkActions(m, dir, say, str, file) {
   const A = m.actions;
   if (A === undefined) return;
@@ -6444,8 +6508,9 @@ const partKeys = p => !p || typeof p !== "object" ? [] : Array.isArray(p.photos)
 // what a host needs from one manifest (the registry entry): everything except what only the developer needs
 // a what's new note as the server keeps it: no HTML, no dashes, one line, 300 characters at most
 const cleanNew = t => String(t == null ? "" : t).replace(/<[^>]*>/g, " ").replace(/[<>]/g, "").replace(/\s*[\u2013\u2014]\s*/g, ", ").replace(/[\u0000-\u001f]/g, " ").replace(/\s+/g, " ").trim().slice(0, 300);
-function registryEntry(m) {
-  const e = JSON.parse(JSON.stringify(m));
+function registryEntry(m0) {
+  const m = withControls(m0);
+  const e = JSON.parse(JSON.stringify(m));   // controls: the Host's "Play with" and each Player's "How I play" are ordinary settings from here on
   delete e.lamba; delete e.$schema;
   e.askName = m.askName === true;
   e.clips = m.clips || []; e.listed = m.listed !== false; e.stagingOnly = m.stagingOnly === true; e.notInDemo = m.notInDemo !== false; e.liveCard = m.liveCard === true; if (m.business === true) e.business = true; if (m.workspace === true) e.workspace = true;
@@ -6479,8 +6544,8 @@ const fixHint = p => /phone design: .*(Send|Undo)/.test(p) ? "Delete your Send, 
   : /hold to|holding/.test(p) ? "Put it on a visible control: a button or a tile with a picture. Hold only as a bonus."
   : /no sound control/.test(p) ? "Add \"forPlayers\": [\"sound\"] to lamba.json: Lamba gives Players the screen's volume, if the Host allows it."
   : /asks the Player for a name/.test(p) ? "Remove the name field and read Lamba.me().name."
-  : /placeholder clips/.test(p) ? "Record two real clips of the app (540 x 920 H.264 mp4, 6 to 14 s) and their -poster.webp."
-  : /clips?/.test(p) ? "Add two clips (clips/<name>.mp4 and clips/<name>-poster.webp) and list them in lamba.json clips."
+  : /placeholder clips/.test(p) ? "Record real clips of the app (node lamba-clips.mjs: 4 or more, 540 x 920 H.264 mp4, 6 to 14 s, each with its -poster.webp)."
+  : /clips?/.test(p) ? "Add 4 to 8 clips (clips/<name>.mp4 and clips/<name>-poster.webp), one for each of the screen, the Host's phone, a Player's phone and the room together, and list them in lamba.json clips (node lamba-clips.mjs records them)."
   : /Chrome 61/.test(p) ? "Screen pages run on Chrome 61: write ES5, no ?. or ??, no object spread, no optional catch binding."
   : /en or em dash/.test(p) ? "Use a comma or a full stop instead."
   : /outside/.test(p) ? "List the https://host in lamba.json outside, or stop reaching it."
@@ -6492,7 +6557,7 @@ const fixHint = p => /phone design: .*(Send|Undo)/.test(p) ? "Delete your Send, 
   : /hidden file|kind of file|file names may|leaves the app|backslash|top of a disk/.test(p) ? "Rename or remove that file."
   : "";
 
-return { MANIFEST_VERSION, ID, NAME_MAX, nameProblem, HOST_KEYS, TYPES, PERMISSIONS, AGES, CATEGORIES, SHELVES, FOR_PLAYERS, HOST_PARTS, HOST_GROUPS, inside, checkRules, PRICE_TIERS, TRIAL_MAX, PREVIEW_MODES, PRODUCTS_MAX, PAY_HOSTS, paidOf, kidsOf, money, split, payOf, priceLabel, ACTIONS_MAX, partKeys, cleanNew, registryEntry, fixHint };
+return { CLIPS_MIN, CLIP_ROLES, ROLE_WORDS, ROLE_NAMES, clipRole, clipRolesMissing, MANIFEST_VERSION, ID, NAME_MAX, nameProblem, HOST_KEYS, TYPES, PERMISSIONS, AGES, CATEGORIES, SHELVES, FOR_PLAYERS, HOST_PARTS, CONTROL_WAYS, CONTROL_KEYS, waysOf, withControls, HOST_GROUPS, inside, checkRules, PRICE_TIERS, TRIAL_MAX, PREVIEW_MODES, PRODUCTS_MAX, PAY_HOSTS, paidOf, kidsOf, money, split, payOf, priceLabel, ACTIONS_MAX, partKeys, cleanNew, registryEntry, fixHint };
 })();
 
 // ---- tools/sdk_perf.mjs ----
@@ -6915,6 +6980,9 @@ const M_files = (() => {
 //      Lamba.buy on the screen page (the screen never sells), Lamba.buy of a product lamba.json does not list, or in an app with
 //      nothing for sale. A kids app: a warning that Lamba sells there to the Host only, behind an extra confirm
 //  19. warning: the screen's code asks for prefers-reduced-motion (films and ambient scenes keep playing on a screen; Lamba answers no-preference there)
+//  20. the screen is only watched: refused, a QR code or join words (scan, PIN, pair) of its own (Lamba draws the join card); warning,
+//      buttons, fields or click and key listeners on the screen page (every control lives on the phones)
+//  21. warnings: no first-time onboarding (no page loads shell/sdk/tour.js), or a tour with no Tips to replay it (AGENTS.md rule 4b)
 //   8. the phone's controls are the shared ones: no <input type=range> or type=color of its own, no grid of colour dots or
 //      swatches (a colours setting with swatches in lamba.json gets the drawer's colour strip and picker), no LambaUI.colours
 const { inside, partKeys, PAY_HOSTS, paidOf, kidsOf } = M_rules;
@@ -7021,6 +7089,21 @@ function noEmoji(m, say, pages, text, scriptsOf, where, has) {
 }
 
 // ---- rule 15b: the Host's camera view (lamba.json "hostCamera") ----
+// How Players play (docs/sdk/SENSORS.md "Who picks the way to play", Nagi 2026-11-26): an app with motion or camera that offers more than one way
+// declares lamba.json "controls" and Lamba draws the Host's "Play with" (Any by default) and each Player's "How I play". Warnings: a setting of its
+// own that picks between ways (Tilt or Wave, Motion or Camera), and a Host default that is not "any"
+const WAY_WORD = /^(camera|cam|motion|tilt|wave|touch|tap|finger|hand|hands|swipe|pad|move|gesture|body)$/i;
+function playWays(m, warnings) {
+  const pm = Array.isArray(m.permissions) ? m.permissions : [];
+  if (!pm.includes("camera") && !pm.includes("motion")) return;
+  const F = (m.settings && m.settings.fields) || {};
+  for (const k of Object.keys(F)) {
+    const f = F[k]; if (!f || f.type !== "choice" || !Array.isArray(f.choices)) continue;
+    const n = f.choices.filter(c => c && (WAY_WORD.test(String(c.id)) || WAY_WORD.test(String(c.name || "")))).length;
+    if (n >= 2) warnings.push("lamba.json: settings." + k + " picks how to play (" + f.choices.map(c => c && c.name).join(", ") + "). Remove it and declare \"controls\": { \"ways\": [\"motion\", \"camera\", \"touch\"] } (the ways the app has): Lamba shows the Host Play with (Any by default) and each Player their own How I play; read Lamba.playWith().");
+  }
+  if (m.controls && m.controls.default !== undefined && m.controls.default !== "any") warnings.push("lamba.json: controls.default is " + JSON.stringify(m.controls.default) + ". Leave it out (\"any\"): each Player picks their own way unless the Host sets one for everyone.");
+}
 function hostCameraView(m, say, warnings, text, scriptsOf, where, has) {
   const p = (m.screens || {}).phone, html = p ? text(p) : null; if (typeof html !== "string") return;
   const { inline, srcs } = scriptsOf(html), own = srcs.map(s => where(p, s)).filter(f => f && f.indexOf("@sdk/") !== 0 && has.has(f));
@@ -7332,6 +7415,7 @@ function landscapeSheetRule(has, text, warnings) {
   for (const f of [...has].filter(f => [".html", ".css"].includes(ext(f)))) {
     const code = (text(f) || "").replace(/\/\*[\s\S]*?\*\//g, "").replace(/<!--[\s\S]*?-->/g, "");
     if (/\.ctl-drawer[^{}]*\{[^}]*\b(box-shadow|border-radius|background)\b/.test(code)) { warnings.push(f + ": restyles Lamba's settings sheet (.ctl-drawer: shadow, corners or colour). The sheet's rounded corners show the surface above in one colour (no shadow around them) in every app: leave its look alone (docs/sdk/DESIGN.md, \"The settings sheet\")"); return; }
+    if (/\.(g-home|g-detail|g-views|g-sliding)\b[^{}]*\{[^}]*\b(transition|animation|transform|translate|opacity|will-change)\b/.test(code)) { warnings.push(f + ": moves Lamba's settings sheet panels (.g-home, .g-detail, .g-views). A tile slides INTO its panel from the right and back out to the right, the sheet's height eases, reduced motion crossfades, the same in every app: leave the panels' motion alone (docs/sdk/DESIGN.md, \"Sub panels slide\")"); return; }
     for (const mm of code.matchAll(/@media[^{]*(?:landscape|max-height|aspect-ratio)[^{]*\{/g)) {
       let depth = 1, i = mm.index + mm[0].length; const start = i;
       while (i < code.length && depth) { const c = code[i++]; if (c === "{") depth++; else if (c === "}") depth--; }
@@ -7356,30 +7440,58 @@ function filmRule(m, has, text, say, warnings, where) {
   }
 }
 
-// ---- the icon (docs/sdk/ASSETS.md "Required: the icon"): warnings only, never a refusal ----
-// A square mark with ONE clear subject in the middle 80%, simple at 48 px. What this can see in an SVG: it is not square; it is (or holds) a picture, a photo or a
-// screenshot, that fills the square (so its subject touches the edges and the rounded corners cut it); a circle or a shape that fills the square edge to edge
-// (a background shape is fine, the subject is not); a heavy file. A picture the size of the square is the usual case: "a raw crop of the screen".
-const ICON_SAY = " Make an icon of one clear subject centred in the middle 80% of a square, simple enough to read at 48 px (https://lamba.tv/devs/docs/assets/#required-the-icon; node lamba-icon.mjs makes one from a picture).";
+// ---- the icon (docs/sdk/ASSETS.md "Required: the icon", the icon standard of 26 Nov 2026): warnings only, never a refusal ----
+// The standard: a full-bleed rich background (gradient, light, depth), ONE descriptive scene or object that says what the app does, soft light and shadow,
+// 2 or 3 harmonious colours, no words, clear at 48 px and rich at 512 px. What this can see in the SVG itself: not square; a background that does not fill
+// the square; words (a <text>); flat (no gradient and no painted picture) or one bare glyph (three shapes or fewer); too many colour families; lines that
+// vanish at 48 px; a heavy file. Whether it reads at 48 px and says what the app does is judged from a render by Lamba's automated review (worker/review.js).
+const ICON_MAX = 50000;
+const ICON_SAY = " The icon standard: a full-bleed rich background, one scene that says what the app does, soft light and shadow, 2 or 3 colours, no words, clear at 48 px (https://lamba.tv/devs/docs/assets/#required-the-icon).";
+// the hue families of an icon's colours: neutrals (grey, near black, near white) left out; hues closer than 24 degrees are one family, a family spans at most 75
+function iconHues(svg) {
+  const hex = [...String(svg).matchAll(/(?:fill|stroke|stop-color|flood-color)\s*[:=]\s*["']?\s*#([0-9a-f]{6}|[0-9a-f]{3})\b/gi)].map(x => x[1].length === 3 ? x[1].replace(/./g, c => c + c) : x[1]);
+  const hues = [];
+  for (const h of new Set(hex.map(x => x.toLowerCase()))) {
+    const [r, g, b] = [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16) / 255), mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, d = mx - mn;
+    const sat = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+    if (sat < 0.2 || l < 0.1 || l > 0.94) continue;
+    let hue = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; hue = (hue * 60 + 360) % 360; hues.push(hue);
+  }
+  hues.sort((x, y) => x - y);
+  if (!hues.length) return [];
+  // start the circle at its widest gap, so a family across 0 degrees (reds) stays one
+  let cut = 0, gap = -1; for (let i = 0; i < hues.length; i++) { const nx = i + 1 < hues.length ? hues[i + 1] : hues[0] + 360, g2 = nx - hues[i]; if (g2 > gap) { gap = g2; cut = i + 1; } }
+  const ring = hues.slice(cut).concat(hues.slice(0, cut).map(x => x + 360)), fam = [[ring[0]]];
+  for (const x of ring.slice(1)) { const F = fam[fam.length - 1]; if (x - F[F.length - 1] < 24 && x - F[0] <= 75) F.push(x); else fam.push([x]); }
+  return fam.map(F => Math.round(F.reduce((p, c) => p + c, 0) / F.length) % 360);
+}
 function iconRule(m, has, text, warnings) {
   const f = m.icon; if (typeof f !== "string" || !has.has(f) || !/\.svg$/i.test(f)) return;
   const svg = text(f); if (typeof svg !== "string") return;
-  const vb = svg.match(/viewBox\s*=\s*["']\s*(-?[\d.]+)[\s,]+(-?[\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)/i), W = vb ? +vb[3] : 0, H = vb ? +vb[4] : 0;
-  const num = (tag, n) => { const x = tag.match(new RegExp("\\b" + n + "\\s*=\\s*[\"']\\s*(-?[\\d.]+)(%?)", "i")); return x ? { v: +x[1], pct: !!x[2] } : null; };
-  if (W && H && Math.abs(W - H) > 0.02 * Math.max(W, H)) warnings.push(f + ": the icon is not square (viewBox " + W + " x " + H + "). Lamba shows it in a square tile and crops the rest." + ICON_SAY);
-  const imgs = [...svg.matchAll(/<image\b[^>]*>/gi)].map(x => x[0]), bytes = svg.length;
-  let full = false;
-  for (const t of imgs) {
-    const w = num(t, "width"), h = num(t, "height"), x = num(t, "x"), y = num(t, "y");
-    const cw = w ? (w.pct ? w.v / 100 : W ? w.v / W : 1) : 1, ch = h ? (h.pct ? h.v / 100 : H ? h.v / H : 1) : 1;
-    if (cw >= 0.9 && ch >= 0.9) full = true;
-  }
-  const raster = /data:image\/(png|jpe?g|webp|gif)/i.test(svg) || imgs.length > 0;
-  if (full) warnings.push(f + ": the icon is a picture (a photo or a screenshot) that fills the whole square, so its subject touches the edges and the rounded corners cut it. At 48 px it is mud." + ICON_SAY);
-  if (bytes > 20000) warnings.push(f + ": the icon is " + Math.round(bytes / 1024) + " KB" + (raster ? " (a picture inside it)" : "") + ". Keep it under 20 KB: one simple mark." + (raster && !full ? ICON_SAY : ""));
-  // a shape that fills the square edge to edge is the background, so only a circle or a path as wide as the square (a subject at the edges) is meant here
-  const circ = [...svg.matchAll(/<circle\b[^>]*>/gi)].map(x => x[0]).find(t => { const r = num(t, "r"); return r && W && r.v * 2 >= 0.96 * W && !/fill\s*=\s*["']url\(/i.test(t); });
-  if (circ && !full) warnings.push(f + ": a circle fills the whole icon edge to edge, so the rounded corners cut it. Keep the subject inside the middle 80%." + ICON_SAY);
+  const vb = svg.match(/viewBox\s*=\s*["']\s*(-?[\d.]+)[\s,]+(-?[\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)/i), X = vb ? +vb[1] : 0, Y = vb ? +vb[2] : 0, W = vb ? +vb[3] : 0, H = vb ? +vb[4] : 0;
+  const num = (tag, n) => { const x = tag.match(new RegExp("\\s" + n + "\\s*=\\s*[\"']\\s*(-?[\\d.]+)(%?)", "i")); return x ? { v: +x[1], pct: !!x[2] } : null; };
+  const say = s => warnings.push(f + ": " + s + ICON_SAY);
+  if (W && H && Math.abs(W - H) > 0.02 * Math.max(W, H)) say("the icon is not square (viewBox " + W + " x " + H + "). Lamba shows it in a square tile and crops the rest.");
+  const body = svg.replace(/<defs\b[\s\S]*?<\/defs>/gi, "").replace(/<(clipPath|mask|pattern|symbol|filter)\b[\s\S]*?<\/\1>/gi, "");
+  const shapes = [...body.matchAll(/<(path|rect|circle|ellipse|polygon|polyline|line|use|image)\b[^>]*>/gi)].map(x => x[0]);
+  const imgs = [...svg.matchAll(/<image\b[^>]*>/gi)].map(x => x[0]), picture = imgs.length > 0 || /data:image\/(png|jpe?g|webp|gif)/i.test(svg);
+  // the background: a rect or a picture that covers the whole square (x and y at the corner, as wide and tall as the viewBox, or 100%)
+  const covers = t => { const w = num(t, "width"), h = num(t, "height"), x = num(t, "x"), y = num(t, "y"), cw = w ? (w.pct ? w.v / 100 : W ? w.v / W : 0) : 0, ch = h ? (h.pct ? h.v / 100 : H ? h.v / H : 0) : 0;
+    return cw >= 0.98 && ch >= 0.98 && (!x || x.v <= X + 0.02 * W) && (!y || y.v <= Y + 0.02 * H); };
+  const bg = shapes.find(t => /^<(rect|image)/i.test(t) && covers(t));
+  if (W && !bg) say("the background does not fill the square, so the tile shows through at its edges. Fill the whole square edge to edge with the background (a gradient) and draw the scene on it.");
+  if (/<text\b/i.test(svg)) say("there are words in the icon (a <text>). An icon has no words, letters or numbers: the app's name is written under it.");
+  const rich = /<(linearGradient|radialGradient)\b/i.test(svg) || picture, drawn = shapes.filter(t => t !== bg).length;
+  if (!rich && drawn <= 3) say("the icon is one flat glyph on a plain colour. It says little about the app and looks unfinished next to the others. Draw one scene of what the app does, with a gradient background, soft light and a shadow.");
+  else if (!rich) say("the icon is flat (plain colours, no gradient, light or shadow). Give the background a gradient and the scene soft light and a shadow, so it has depth.");
+  else if (drawn <= 3 && !picture) say("the icon is a single bare glyph (" + drawn + (drawn === 1 ? " shape" : " shapes") + " on the background). Make it a descriptive scene: the thing the app shows or does, with light, shadow and a detail or two.");
+  else if (!picture && (svg.match(/<(linearGradient|radialGradient)\b/gi) || []).length <= 1 && !/<filter\b/i.test(svg)) say("the scene is flat on a gradient: the background has depth but the subject has no light or shadow. Shade the subject (a gradient on it, a highlight) and give it a soft shadow.");
+  const fam = iconHues(svg);
+  if (fam.length > 4) say("the icon uses " + fam.length + " different colour families. Keep to 2 or 3 colours that sit well together (shades of each are fine), so it reads as one picture.");
+  // lines that vanish at 48 px: a stroke under 0.35 px there (transforms not counted)
+  if (W) { const thin = shapes.map(t => num(t, "stroke-width")).filter(x => x && !x.pct && x.v > 0 && x.v / W * 48 < 0.35).length;
+    if (thin) say(thin + (thin === 1 ? " line is" : " lines are") + " under half a pixel wide at 48 px, so they vanish small. Make the lines that carry the picture thicker, or leave them out."); }
+  if (svg.length > ICON_MAX) say("the icon is " + Math.round(svg.length / 1024) + " KB" + (picture ? " (a picture inside it)" : "") + ". Keep it under " + Math.round(ICON_MAX / 1000) + " KB: it is loaded in every app list on every phone." + (picture ? " node lamba-icon.mjs makes a smaller copy of a painted picture." : ""));
 }
 function checkFiles(o) {
   const m = o.manifest || {}, P = [], say = s => P.push(s), acorn = o.acorn || null;
@@ -7408,6 +7520,12 @@ function checkFiles(o) {
       if (/<(video|audio)\b/i.test(html)) say(p + ": has a <video> or <audio> element (a screen page never does: use Lamba.film and Web Audio)");
       const own = srcs.filter(s => allowedRef(p, s)).map(s => where(p, s)).filter(f => f && f.indexOf("@sdk/") !== 0 && has.has(f));
       [...inline, ...own.map(text)].forEach((code, i) => { if (/createElement\(\s*["'](video|audio)["']\s*\)|new\s+Audio\s*\(/.test(code)) say(p + ": a script makes a video or audio element (" + (i < inline.length ? "inline script " + (i + 1) : own[i - inline.length]) + ")"); });
+      // 20. the screen is only watched: no join card, QR code or code of its own (Lamba draws the join card), and no controls (they live on the phones)
+      const allCode = [...inline, ...own.map(text)].join("\n"), markup = html.replace(/<script\b[\s\S]*?<\/script>/gi, "").replace(/<style\b[\s\S]*?<\/style>/gi, "");
+      if (/\bqrcode|\bqr-code|\bqrious\b|\bkjua\b|\bQRCode\b|\bqr_code/i.test(html + "\n" + allCode)) say(p + ": draws a QR code of its own. Only Lamba shows the QR code and the join code on the screen (rule 20)");
+      if (/scan[^<]{0,40}\bto (pair|play on your phone)|join pin|pairing (code|pin)|\bpair your (phone|remote)|open (phone )?remote/i.test(markup)) say(p + ": shows its own join words (scan, PIN, pair, open remote). Lamba shows how to join; the screen says nothing about it (rule 20)");
+      const ctl = (markup.match(/<(button|input|select|textarea)\b/gi) || []).length, listen = /addEventListener\(\s*["'](click|keydown|keyup|pointerdown|mousedown|touchstart)["']|\bon(click|keydown|pointerdown|touchstart)\s*=/i.test(allCode + markup);
+      if (ctl || listen) warningsLater.push(p + ": has controls on the screen (" + (ctl ? ctl + " button or field" + (ctl > 1 ? "s" : "") : "a click or key listener") + "). The screen is only watched: modes, sound, pause and every game control go on the phones (lamba.json settings and actions for the Host, phone.html for Players). Lamba gives the sound control (rule 20)");
       // 3. parses on Chrome 61
       if (!acorn) say("can't read scripts as Chrome 61 would: run npm install once (acorn)");
       else {
@@ -7514,11 +7632,19 @@ function checkFiles(o) {
   controllerRule({ manifest: m, paths: [...has], text }, say, scriptsOf, where);
   // 14. no emoji in what people read
   noEmoji(m, say, pages, text, scriptsOf, where, has);
+  // 21. warnings: onboarding for the Host and every Player (AGENTS.md rule 4b): a page loads the kit's tour, and a Tips key replays it
+  {
+    const pageText = pages.map(p => text(p) || "").join("\n"), tour = /shell\/sdk\/tour\.js/.test(pageText);
+    const withPlayers = m.guests === true || (m.players && m.players.max > 0);
+    if (!tour) warningsLater.push("no first-time onboarding: no page loads ../../shell/sdk/tour.js. Teach the Host and " + (withPlayers ? "every Player" : "the phone") + " once with LambaTour, steps ticked by the real actions, a quiet Skip (AGENTS.md rule 4b, rule 21)");
+    else if (!/["'>]\s*tips\b|\.tips\s*\(/i.test(pageText) && !(m.actions || []).some(a => a && /^tips$/i.test(a.key))) warningsLater.push("the first-time tour has no way back: add a Tips key on the Player's remote and a \"tips\" action in lamba.json for the Host that replay it (AGENTS.md rule 4b, rule 21)");
+  }
   // 15. an app Players join has a player remote, and never asks for a name
   const warnings = warningsLater;
   playerRemote(m, say, warnings, text, scriptsOf, where, has);
   // 15b. the Host camera view (lamba.json "hostCamera"): the phone page draws view "camera"; a page that draws it without hostCamera is never shown
   hostCameraView(m, say, warnings, text, scriptsOf, where, has);
+  playWays(m, warnings);
   askNameRule(m, warnings, pages, text, scriptsOf, where, has);
   startRule(m, warnings, pages, text);
   controlsRule(m, warnings, pages, text, scriptsOf, where, has);
@@ -7646,7 +7772,7 @@ function micWarnings(m, files, text, warn) {
   if (!/microphone|\bmic\b|voice|listen|blow|speak|sing|say/.test(about)) warn("the microphone: the app's page never says it listens (page.about or page.facts: say what it hears and why, e.g. \"Blow on your phone to...\")");
 }
 
-return { MIC_MODES, micModes, pageControls, EMOJI, phoneDesign, filmRefs, checkFiles, snippetProblems };
+return { MIC_MODES, micModes, pageControls, EMOJI, phoneDesign, filmRefs, ICON_MAX, iconHues, checkFiles, snippetProblems };
 })();
 
 // ---- worker/zip.js ----
@@ -7743,7 +7869,7 @@ const M_upload = (() => {
 // The automatic check on every app a developer uploads (worker/studio.js, docs/sdk/REVIEW.md). The same rules as
 // `lamba check` (tools/sdk_rules.mjs for lamba.json, tools/sdk_check.mjs for the pages and scripts), plus what an app
 // from outside Lamba must also meet: a zip Lamba can read, safe file names and kinds, the size limits, its own id, and
-// two clips for its page.
+// 6 to 10 clips for its page, one for each role (screen, Host, Player, together) and more moments.
 //   const r = await checkUpload(bytes, { app, reserved, taken })
 //     app       the app's id when this is a new version of it (lamba.json must say the same), or "" for a new app
 //     reserved  ids no outside app may use (Lamba's own apps)
@@ -7752,7 +7878,7 @@ const M_upload = (() => {
 //               (the kit's lamba-check.mjs, the simulator) they are only a warning, the first of the notes
 //   r: { manifest, files: [{ path, bytes, type, size }], problems: [sentences], notes: [what a reviewer should look at], size }
 const acorn = M_acorn;
-const { checkRules, ID } = M_rules;
+const { checkRules, ID, CLIPS_MIN } = M_rules;
 const { checkFiles, micModes } = M_files;
 const { unzip, mb } = M_zip;
 
@@ -7827,7 +7953,7 @@ async function checkUpload(bytes, o) {
     else if (!opt.app && (opt.reserved || []).includes(m.id)) say("the id " + m.id + " belongs to one of Lamba's own apps: choose another");
     else if (!opt.app && opt.taken && opt.taken(m.id)) say("the id " + m.id + " is already taken by another developer: choose another");
   }
-  if (!Array.isArray(m.clips) || m.clips.length < 2) say("clips: at least 2 [file, caption] (design rules: Clips, node lamba-clips.mjs)");
+  if (!Array.isArray(m.clips) && m.stagingOnly === true) say("clips: at least " + CLIPS_MIN + " [file, caption, role] (the screen, the Host's phone, a Player's phone and the room together; design rules: Clips, node lamba-clips.mjs)");   // (the rules above skip an app that says stagingOnly; an upload says it must not)
   if (Array.isArray(m.clips)) {   // real clips of the app, not the starter's placeholders
     const clipFiles = files.filter(f => /^clips\//.test(f.path) && /\.(mp4|webp)$/i.test(f.path));
     let placeholder = false; for (const f of clipFiles) if (PLACEHOLDER_CLIPS.includes(await sha256(f.bytes))) { placeholder = true; break; }

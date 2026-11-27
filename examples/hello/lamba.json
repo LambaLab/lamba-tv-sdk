@@ -138,12 +138,34 @@
  "frame": "none",
  "clips": [
   [
+   "hello-start",
+   "How the room starts",
+   "together"
+  ],
+  [
    "hello-tv",
-   "What the screen shows"
+   "What the screen shows",
+   "screen"
   ],
   [
    "hello-phone",
-   "What a phone does"
+   "What the Host does",
+   "host"
+  ],
+  [
+   "hello-player",
+   "What a Player does",
+   "player"
+  ],
+  [
+   "hello-together",
+   "The room together",
+   "together"
+  ],
+  [
+   "hello-moment",
+   "A later moment",
+   "screen"
   ]
  ]
 }

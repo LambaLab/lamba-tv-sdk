@@ -468,7 +468,7 @@ interface LambaHands {
   /** Which camera flip would use: "phone" (this phone page, propped up), "screen" (the screen's own camera, when its host has one) or "none" (no camera, an old browser). */
   where(): Promise<"screen" | "phone" | "none">;
   /** Right hand pinch = "next", left hand pinch = "previous", once for each pinch. on(dir) is called for each; the edge glow and a one-time hint are shown unless glow / hint is false. */
-  flip(o: { on?(dir: "next" | "previous", e: { side: "right" | "left"; t: number }): void; onState?(state: "starting" | "loading" | "on" | "none" | "stopped"): void; /** a hand pointing (index out, the others curled): where its fingertip is on the screen, 0 to 1, mirrored on the front camera and smoothed; (null, null) when it stops. Send it to Lamba.ink.aim for the laser. */ onPoint?(x: number | null, y: number | null): void; /** 0 to 1 while the hand model downloads */ onProgress?(fraction: number): void; camera?: "front" | "back"; glow?: boolean; hint?: boolean | string; rate?: number; swap?: boolean }): { source: "screen" | "phone" | "none"; state: string; why: string; ready: Promise<any>; on(fn: (dir: "next" | "previous", e: any) => void): any; onState(fn: (state: string) => void): any; stop(): any };
+  flip(o: { on?(dir: "next" | "previous", e: { side: "right" | "left"; t: number }): void; onState?(state: "starting" | "loading" | "on" | "none" | "stopped"): void; /** a hand pointing (index out, the others curled): where its fingertip is on the screen, 0 to 1, mirrored on the front camera and smoothed; (null, null) when it stops. Send it to Lamba.ink.aim for the laser. */ onPoint?(x: number | null, y: number | null, pen: boolean): void; /** pen is true while two fingers (index and middle, side by side) are together: draw with Lamba.ink.pen(x, y, pen). */ /** the O (thumb and index make a round ring) building, 0 to 1 (0 when it stops) */ onRing?(fraction: number): void; /** the O held about 0.6 s: clear the drawing (Lamba.ink.erase()). Setting it turns the O on. */ onErase?(): void; /** 0 to 1 while the hand model downloads */ onProgress?(fraction: number): void; camera?: "front" | "back"; glow?: boolean; hint?: boolean | string; rate?: number; swap?: boolean }): { source: "screen" | "phone" | "none"; state: string; why: string; ready: Promise<any>; on(fn: (dir: "next" | "previous", e: any) => void): any; onState(fn: (state: string) => void): any; stop(): any };
 }
 interface LambaTrackFrame { v: number; t: number; id: number; w: number; h: number; mirror: boolean; pose: Array<{ x: number; y: number; z: number; v: number; wx?: number; wy?: number; wz?: number }> | null; hands: Array<{ side: "left" | "right"; points: Array<{ x: number; y: number; z: number }>; shape: string; pinch: number; pinching: boolean; wave: number; [k: string]: any }>; face: { blend: { [name: string]: number }; mesh: any; smile: number; emotion: string } | null; gestures: { body: { [k: string]: any }; pair: { [k: string]: any }; events: Array<{ type: string; [k: string]: any }> }; /** the picture's mean brightness, 0 to 255, measured on the phone about once a second (the picture never leaves it) */ light?: number; [k: string]: any }
 interface LambaTrackOptions { /** The person just tapped something that clearly starts the camera: skip Lamba's own "Use your camera?" and go straight to the browser's question (one question, not two). false: it was not a tap, Lamba asks first. Left out, Lamba reads navigator.userActivation: start() called inside a tap counts as a tap. Without a tap (an app that opens straight into a camera view) Lamba asks first, and a camera the browser already blocked is never asked again: Lamba says how to turn it back on. */ asked?: boolean; camera?: "front" | "back"; pose?: boolean; hands?: boolean; face?: boolean; gestures?: boolean; /** frames a second, 5 to 30 (default 30) */ rate?: number;
@@ -504,7 +504,7 @@ interface LambaTrack {
   /** only: "hands" (with over: true) draws just the real hands cut out of the camera picture (soft edge, the forearm to the picture's edge, mirrored on the front camera), over your page in el's box: the whole camera picture maps to the whole box and a hand keeps its true shape, its index fingertip exactly at its place. Never a face or a body. */
   preview(el: Element | null, o?: { under?: boolean; nodes?: boolean; fit?: "cover" | "contain"; only?: "hands"; over?: boolean; /** "screen" (the Host's phone only, with only: "hands", a home camera on the screen): the same hand cutout also shows on the screen over its camera picture. Lamba cuts the hand out ON THE PHONE and sends ONLY the cutout (small, about 20 frames a second) to the room's screen, never the camera picture, the face or the body; black is sent once the hand is lost. It stops with the preview, the camera and a hidden page; a Player or Co-Host never has it. Your page never has the picture. */ share?: "screen"; /** The fingertip pointer (default true with only: "hands", false turns it off): a small bright dot exactly at the index fingertip with a soft, slowly pulsing ring (no ring, only the dot, for reduced motion). It is drawn into the cutout, so the screen shows it too. Tell Lamba when the tip is over a glow with track.pointer(). */ pointer?: boolean; /** How the hand looks with only: "hands" (default "wire": a fine white wireframe of the 21 landmarks with a ring at the index tip, no camera pixel, nothing shared with the screen but landmarks; "sticker" and "plain" are the cutouts). Old note, "sticker": a firm edge, a white outline round it and a soft shadow under it, like a sticker lifted off the picture (the outline hides the noisy fringe round the hand), a small pop when it appears and a fade when it leaves (none with reduced motion); the screen gets the same sticker. "plain": the cutout alone, with a soft 2 to 3 px edge. */ look?: "wire" | "sticker" | "plain" }): void;
   /** A small live self view of this phone's camera (the plain picture, mirrored like the picture the engine runs), drawn by Lamba exactly over el (at most 200 x 200, about 15 frames a second), ALONGSIDE any preview: with preview(other, { only: "hands" }) drawing the hand over another picture, the person still sees that the camera is on and where it looks. Your page never has the picture. self(null) takes it away. */
-  self(el: Element | null): void;
+  self(el: Element | null, o?: { under?: boolean; points?: boolean }): void;   // under: drawn UNDER the page at el (up to 480 x 480), the page's keys on it; points: the hand's joints as light dots
   /** With preview(el, { only: "hands" }): the tip is over a glow (over true: the ring tightens) and how far that glow's hold has filled (progress 0 to 1). Call it as often as you like; Lamba sends only changes. */
   pointer(over: boolean, progress?: number): void;
   /** Hand gestures from the running session's landmarks (load ../../shell/sdk/gesture.js): gestures(true) starts them, gestures(false) stops them; true when they run. With hysteresis and a debounce, so jitter makes nothing. */
@@ -545,6 +545,8 @@ interface LambaRecord {
   /** Pause and resume the running recording (Lamba's own key does this too). Paused time is left out of the voice, the timeline and the length. */
   pause(): LambaRecord;
   resume(): LambaRecord;
+  /** Slide i is page n of the deck on the screen: the server copies that page's FULL picture into the recording (the phone sends none), so the link shows it sharp. */
+  page(i: number, n: number): LambaRecord;
   /** A timeline event; the host stamps its time. Ignored while not recording. */
   event(e: LambaRecordEvent): LambaRecord;
   /** A small JPEG (data URL, at most 400 KB) of slide i, for the link's chapters. */
@@ -620,7 +622,7 @@ interface LambaVideo {
   pickSlot(r: { x: number; y: number; w: number; h: number } | null): LambaSDK;
   /** a phone page: a small data picture of page n of the deck, or "" */
   thumb(n: number): Promise<string>;
-  live(o?: { from?: "camera" | "screen" | "any"; senders?: 1 | 2 | 3 | 4 | 5 | 6; heads?: boolean; files?: boolean; /** with files: the Host's phone adds a deck (a PDF, pictures, a Google Slides link); the room keeps the pages and only this screen page moves them (page(n)); Lamba draws the remote (big keys, count, strip, video bar) on every phone. With files false and from "screen": the keys of Present from my computer. */ deck?: boolean; /** a deck's transition when a page changes: "none" (default), "fade", "slide" or "zoom" */ transition?: "none" | "fade" | "slide" | "zoom"; /** true: Lamba draws the live picture UNDER your page, and your page is transparent where it draws nothing (leave the page background out), so you can draw over the picture (a glow, a ring). Your page never gets a pixel of it. */ under?: boolean; /** true: a Player keeps your own remote (phone.html) while video is live, instead of the copy of the screen; Lamba's Camera key stands at the foot below it. Use it when the remote is the camera view (Lamba.track.preview). */ own?: boolean; big?: boolean; audio?: boolean; /** the phone's first camera: "front" (default, a face, mirrored) or "back" (a whiteboard, a page) */ camera?: "front" | "back" } | false): Promise<"on" | "none" | "off">;
+  live(o?: { from?: "camera" | "screen" | "any"; senders?: 1 | 2 | 3 | 4 | 5 | 6; heads?: boolean; files?: boolean; /** with files: the Host's phone adds a deck (a PDF, pictures, a Google Slides link); the room keeps the pages and only this screen page moves them (page(n)); Lamba draws the remote (big keys, count, strip, video bar) on every phone. With files false and from "screen": the keys of Present from my computer. */ deck?: boolean; /** a deck's transition when a page changes: "none" (default), "fade", "slide" or "zoom" */ transition?: "none" | "fade" | "slide" | "zoom"; /** true: Lamba draws the live picture UNDER your page, and your page is transparent where it draws nothing (leave the page background out), so you can draw over the picture (a glow, a ring). Your page never gets a pixel of it. */ under?: boolean; /** true (with deck): the Host can show their own face over the pages as a circle or a rounded square with a shadow, and their voice with it; the Host and the Players move it. Lamba draws the Host's "Show me on the screen" switch and the Mic switch. */ face?: boolean; /** false: the Host's voice never plays on this screen (the Host is in the room), it goes to people who are away and to someone watching */ speaker?: boolean; /** true: a Player keeps your own remote (phone.html) while video is live, instead of the copy of the screen; Lamba's Camera key stands at the foot below it. Use it when the remote is the camera view (Lamba.track.preview). */ own?: boolean; big?: boolean; audio?: boolean; /** the phone's first camera: "front" (default, a face, mirrored) or "back" (a whiteboard, a page) */ camera?: "front" | "back" } | false): Promise<"on" | "none" | "off">;
   /** Where Lamba draws the picture: the whole page by default (a half each with senders 2, a grid of 3 to 6 parts with a thin black line between). from: one sender's id (from a "show"); left out: every sender. place(null) puts it back. */
   place(rect: LambaVideoRect | null, from?: string): LambaSDK;
 }
@@ -649,6 +651,8 @@ interface LambaInk {
   players: boolean | null;
   on(ev: "players", fn: (on: boolean) => void): () => void;
   /** A finished stroke (points are 0 to 1 of the placed rectangle), or a pointer moving (at most 10 a second for each person). from: "owner" or a Player's id. */
+  /** A clear (the Host's Clear key) or an undo, heard on the screen page. */
+  on(ev: "clear", fn: (c: { from: string; name: string }) => void): () => void;
   on(ev: "stroke", fn: (s: { from: string; name: string; colour: string; points: { x: number; y: number }[] }) => void): () => void;
   on(ev: "point", fn: (s: { from: string; name: string; colour: string; x: number; y: number }) => void): () => void;
   on(ev: "live", fn: (state: "on" | "off" | "none") => void): () => void;
@@ -665,6 +669,10 @@ interface LambaInk {
   clear(): LambaSDK;
   /** A PHONE page (lamba.json "ink"): a pointing hand drives this phone's laser dot on the screen. x, y are 0 to 1 of the screen's picture; aim(null, null) when the hand stops. Lamba keeps to the Host's rules and sends it like the pad's own dot. */
   aim(x: number | null, y: number | null): LambaSDK;
+  /** A PHONE page: a hand drawing. pen(x, y, true) puts the pen down and moves it (the line a held key draws), pen(x, y, false) is only the dot, pen(null, null, false) the hand gone. */
+  pen(x: number | null, y: number | null, down: boolean): LambaSDK;
+  /** A PHONE page: clear the drawing like Clear (a Host clears everyone's, a Player their own), with no second question. */
+  erase(): LambaSDK;
 }
 
 interface LambaSDK {
@@ -701,6 +709,11 @@ interface LambaSDK {
   /** The page has drawn itself: the host fades it in (a picture view: the picture is ready). */
   /** The Host's own page: open one of Lamba's own pages in a new tab from a tap. Only "/helper" (the Mac app download) is allowed. */
   link(path: "/helper"): LambaSDK;
+  /** Phones: has this person seen a first-time tour or tip (LambaTour, shell/sdk/tour.js)? Kept by Lamba for the signed in account on this phone, else for the phone. seen(key, true) marks it. */
+  seen(key: string): Promise<boolean>;
+  seen(key: string, set: true): Promise<boolean>;
+  /** Phones of an app with files and a deck (Air Slides): open the same picker as the Add slides tile. Call it from a tap. */
+  addSlides(): LambaSDK;
   drawn(): LambaSDK;
   /** Staging only: a small plain object (3000 characters at most) to the staging log (wrangler tail, "tcltest 0000 app"), so a run on a real phone can be read afterwards. It goes nowhere on live. */
   report(o: { [k: string]: unknown }): LambaSDK;
@@ -752,6 +765,8 @@ interface LambaSDK {
   setOwn(person: string, patch: Record<string, unknown>): LambaSDK;
   /** Part: change settings; final false while still moving (a slider being dragged). */
   change(patch: { [key: string]: SettingValue }, final?: boolean): LambaSDK;
+  /** lamba.json "controls": how a Player plays now (the Host's one way, else the Player's own pick). A phone: this Player; the screen: pass an entry of Lamba.players. null without controls. */
+  playWith(player?: LambaPlayer): "camera" | "motion" | "touch" | null;
   store: LambaStore;
   sound: LambaSound;
   /** Ask for a permission lamba.json declares. One not declared is always "denied". */
@@ -762,6 +777,12 @@ interface LambaSDK {
   clip(canvas: HTMLCanvasElement, opts: LambaClipOptions): LambaClip;
   /** Screen: the host's join card with the code people scan. Only for apps guests join. line: at most 60 characters. */
   /** The host's join card. An ambient app (categories "ambient", "art" or "clocks") never gets the big card in the middle: "full" shows the corner card for 30 s, then only the small code in that corner; "corner" is the small code at once. side: which bottom corner (default "left"). */
+  /** The screen, on a Mac's browser: Lamba draws a card over the app with a Download button for the Lamba helper (a sealed app cannot download itself). false removes it. Anything but a Mac: nothing. */
+  helperCard(on?: boolean): LambaSDK;
+  /** The Host's phone: Lamba emails the signed-in person's own address the helper's download page (the sign-in email's free sender). why: "signin" | "soon" | "mail" | "host". */
+  /** The QR code of the Lamba helper's download page as an SVG string, drawn by Lamba; "" when it cannot. */
+  helperQr(): Promise<string>;
+  helpMail(): Promise<{ ok: boolean; why: string }>;
   joinCard(o: { show?: boolean; size?: "full" | "corner" | "code"; line?: string; avoid?: [number, number, number, number]; side?: "left" | "right" }): LambaSDK;
   /** Screen: the in-room question for what is on screen now. */
   question(q: LambaQuestion): LambaSDK;
