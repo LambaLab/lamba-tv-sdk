@@ -5,6 +5,10 @@ joining from their phones. Children use it. Follow these instructions exactly. T
 
 At the start of every session, and whenever a tool says a newer kit exists, run `node lamba-update.mjs` first. Never tell the developer something the current kit doesn't say.
 
+**The prompt is often one line**: "Build me a Lamba TV app: <idea>. Use github.com/LambaLab/lamba-tv-sdk". Everything
+else is in this file and the `lamba-tv-app` skill. Follow them as if the developer had written every rule out, and start
+with "Ask first" (below) before any code.
+
 The docs are in one place: https://lamba.tv/devs/docs/ (all of them in one file for an AI: https://lamba.tv/devs/llms-full.txt, and through the Lamba MCP server's `lamba_docs`). The kit has no copy of them.
 
 **Who you work for.** Most people building Lamba apps have never coded. Lead them through every step in plain words,

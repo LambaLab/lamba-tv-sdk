@@ -7,10 +7,19 @@ This repo is everything you need to build one, made for building with an AI codi
 
 ## Start with the prompt
 
-Paste this into Claude Code or Codex, with your idea in its first line:
+Paste this into Claude Code or Codex, with your idea in it:
 
 ```
-Build me a Lamba TV app: a trivia game everyone answers on their phone. Keep it to one simple thing. Use github.com/LambaLab/lamba-tv-sdk
+Build me a Lamba TV app: a trivia game everyone answers on their phone. Use github.com/LambaLab/lamba-tv-sdk
+```
+
+<details>
+<summary>The full prompt</summary>
+
+The same, with every rule spelled out. The kit already tells your agent all of it.
+
+```
+Build me a Lamba TV app: a trivia game everyone answers on their phone. Use github.com/LambaLab/lamba-tv-sdk
 
 What a Lamba TV app is
 - It runs on any screen: a screen at home, or a screen at work, in a shop or a classroom. Everyone in front of it plays or controls it from their own phone, by scanning the code on the screen. No app to install, no account for guests.
@@ -32,6 +41,8 @@ How to build it
 3. Run the check and the self-test, look at every screenshot and go through the design checklist. Fix everything until they all pass. Then record its clips with lamba-clips.mjs.
 4. Then tell me in one sentence what you built and how I can try it. I'm not technical: guide me through every step in plain words and do every step you can yourself. If Lamba isn't connected yet, connect it yourself as the kit's AGENTS.md says (in a chat, end your message with the link I tap to approve), and upload it for me. Never leave me with a zip to upload myself unless every way to connect fails.
 ```
+
+</details>
 
 That's all. At the start of every session, and whenever a tool says a newer kit exists, run `node lamba-update.mjs` first. Never tell the developer something the current kit doesn't say.
 Your agent gets this kit from here (the zip into `lamba-app/`, below, or a clone in an empty folder), reads `AGENTS.md` and the `lamba-tv-app` skill, builds the app, checks and
