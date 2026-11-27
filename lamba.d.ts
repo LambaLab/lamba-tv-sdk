@@ -650,6 +650,7 @@ interface LambaInk {
   /** The Host lets Players point and draw (their Players tile): null until the room says, then true or false. Show your join card only when true. */
   players: boolean | null;
   on(ev: "players", fn: (on: boolean) => void): () => void;
+  on(ev: "laser", fn: (on: boolean) => void): () => void;
   /** A finished stroke (points are 0 to 1 of the placed rectangle), or a pointer moving (at most 10 a second for each person). from: "owner" or a Player's id. */
   /** A clear (the Host's Clear key) or an undo, heard on the screen page. */
   on(ev: "clear", fn: (c: { from: string; name: string }) => void): () => void;
@@ -671,6 +672,10 @@ interface LambaInk {
   aim(x: number | null, y: number | null): LambaSDK;
   /** A PHONE page: a hand drawing. pen(x, y, true) puts the pen down and moves it (the line a held key draws), pen(x, y, false) is only the dot, pen(null, null, false) the hand gone. */
   pen(x: number | null, y: number | null, down: boolean): LambaSDK;
+  /** A PHONE page: the ONE laser of this phone, shared by the keys' Laser switch and the camera view's. laser() says whether it is on; laser(true | false) sets it. */
+  laser(on?: boolean): any;
+  /** true or false once the laser state is known (set, or the keys' switch flipped); on("laser", fn) hears the keys' switch. */
+  laserOn?: boolean;
   /** A PHONE page: clear the drawing like Clear (a Host clears everyone's, a Player their own), with no second question. */
   erase(): LambaSDK;
 }
@@ -783,6 +788,8 @@ interface LambaSDK {
   /** The QR code of the Lamba helper's download page as an SVG string, drawn by Lamba; "" when it cannot. */
   helperQr(): Promise<string>;
   helpMail(): Promise<{ ok: boolean; why: string }>;
+  /** The phone's share sheet (AirDrop, WhatsApp, Messages) with the Lamba helper's download page. Call from a tap. why: "cancel", "copied" (no share sheet: the link was copied), "none". */
+  helpShare(): Promise<{ ok: boolean; why: string }>;
   joinCard(o: { show?: boolean; size?: "full" | "corner" | "code"; line?: string; avoid?: [number, number, number, number]; side?: "left" | "right" }): LambaSDK;
   /** Screen: the in-room question for what is on screen now. */
   question(q: LambaQuestion): LambaSDK;
@@ -792,6 +799,8 @@ interface LambaSDK {
   show(): LambaSDK;
   /** Part: open a group of the settings drawer (and one of its parts); "" goes back to the tiles. */
   open(group: string, part?: string): LambaSDK;
+  /** Part, on the Host's phone: back to the settings home and shut the sheet, so the copy of the screen is in view (an editor's Done). { send: true } also sends what waits, as the Send button does. */
+  close(o?: { send?: boolean }): LambaSDK;
   /** Part, or the screen's copy on the Host's phone: the words under a settings tile whose value is "app", at most 40 characters. */
   describe(group: string, text: string): LambaSDK;
   /** Screen: where the movable parts of the picture are now (screen widths; w, h before turning; r in degrees), so the phone's copy of the screen shows handles to move, size and turn them. A "transforms" setting holds the result. */

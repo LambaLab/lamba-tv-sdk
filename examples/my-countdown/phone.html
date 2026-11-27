@@ -9,6 +9,8 @@
 <style>
 /* a short part (a phone on its side): the Start button already says the time */
 @media (max-height: 250px) { #cap { display: none; } .l-form { gap: 8px; padding: 0 2px 2px; } }
+/* on its side (the page above it is a phone held sideways, little height): the quick times step aside, so the wheels and Start are whole and tappable */
+html.l-side #cap, html.l-side #chips { display: none; } html.l-side .l-form { gap: 6px; padding: 0 2px; } html.l-side .l-btn { min-height: 44px; }
 </style>
 <!--
   Countdown on the Host's phone: only part "time", the Time group of the settings: the quick times (one row of chips, a tap
@@ -41,6 +43,8 @@
     }
     L.store.on(function (k, v) { if (k === "run" && v) run = RUN.clean(v); });
     if (L.screen.view !== "part") return;
+    // the phone is held sideways (the host's room: wide, little height): this page's own height is the part's, so the host tells it
+    var sideSet = function () { var r = L.screen.room; document.documentElement.classList.toggle("l-side", !!r && r.w >= 600 && r.h <= 500); }; sideSet(); L.onScreen(sideSet);
 
     // ---- the Time group: the quick times, then three wheels (hours, minutes, seconds) and Start ----
     $("custom").hidden = false;
