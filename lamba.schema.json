@@ -293,6 +293,17 @@
    "type": "boolean",
    "description": "true: the Share drawer also offers Invite someone to watch, a link whose people only see the screen live (the slide, laser, drawings, the Host's face), with no keys and no controls; the Host sees them in the people list and can remove them. Needs guests true and the video permission"
   },
+  "face": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "players": {
+     "type": "boolean",
+     "description": "true: Players may also show their own face and voice over the app (an app that opens Lamba.video.live({ face: true })): a Me switch and a Mic switch in their keys row, off to begin with, each Player their own bubble on the screen that they and the Host can move. The Host decides with \"Players can show themselves\" in the face settings (on to begin with) and can stop anyone. Needs guests true and the video permission; the plan's heads and remote people limits apply"
+    }
+   },
+   "description": "The face and voice of the people (lamba.json). { \"players\": true } lets Players show themselves too"
+  },
   "askName": {
    "type": "boolean",
    "description": "true: a Player is asked their first name once (Lamba keeps it for every app) before the remote, and the app reads it (Lamba.me(), the players' names). Left out or false: a Player goes straight to the remote and the app sees \"Player 1\", \"Player 2\". Ask only if the app shows names (a multiplayer game, scores, turns). Needs guests true"

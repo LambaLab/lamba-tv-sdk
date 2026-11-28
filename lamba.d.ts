@@ -646,6 +646,14 @@ interface LambaDesktop {
   on(ev: "pinch", fn: (dir: "next" | "previous", e: { side: "right" | "left"; ok: boolean; via: string; why: string }) => void): () => void;
   on(ev: "cam", fn: (state: "on" | "off" | "denied" | "nocam" | "failed") => void): () => void;
 }
+interface LambaFace {
+  /** A PLAYER's phone page (lamba.json "face": { "players": true }, video declared): true when this Player may show themselves now (the Host allows it and the screen opened a face). */
+  can(): boolean;
+  /** Whether this Player's Me switch is on (the keys row's Me and the camera view's are the same state). me(true | false) turns it on or off: the camera is asked on that tap. */
+  me(on?: boolean): boolean | any;
+  /** Hears the Me switch change (the keys' switch, this page, or the Host turning it off), and whether the Player may now (can). */
+  on(ev: "me", fn: (on: boolean, can: boolean) => void): () => void;
+}
 interface LambaInk {
   /** The Host lets Players point and draw (their Players tile): null until the room says, then true or false. Show your join card only when true. */
   players: boolean | null;
@@ -798,7 +806,9 @@ interface LambaSDK {
   /** Part, guest: ask the host to put this app on the screen. */
   show(): LambaSDK;
   /** Part: open a group of the settings drawer (and one of its parts); "" goes back to the tiles. */
-  open(group: string, part?: string): LambaSDK;
+  open(group: string, part?: string, data?: unknown): LambaSDK;
+  /** Part: the small note Lamba.open(group, part, data) passed when this part was opened that way (a tap on a widget in the copy of the screen). */
+  onOpen(fn: (data: unknown) => void): LambaSDK;
   /** Part, on the Host's phone: back to the settings home and shut the sheet, so the copy of the screen is in view (an editor's Done). { send: true } also sends what waits, as the Send button does. */
   close(o?: { send?: boolean }): LambaSDK;
   /** Part, or the screen's copy on the Host's phone: the words under a settings tile whose value is "app", at most 40 characters. */
@@ -823,6 +833,8 @@ interface LambaSDK {
   video: LambaVideo;
   /** The screen, "ink" declared: phones point and draw over this page, drawn by Lamba (docs/sdk/SENSORS.md, "Ink and pointers"). */
   ink: LambaInk;
+  /** A Player's own face and voice over the screen (docs/sdk/SENSORS.md, "A Player's face and voice"): Lamba draws the Me and Mic switches; a camera view that hides the keys puts a Me under its Laser from this. */
+  face: LambaFace;
   /** A phone page on the Host's computer, "desktop" declared: the Lamba helper moves Keynote and PowerPoint (docs/sdk/SENSORS.md, "Lamba helper"). */
   desktop: LambaDesktop;
   /** The Host's smart home, "home": true declared (docs/sdk/HOME.md): list and allow devices on the Host's phone, switch the allowed ones from the screen. */

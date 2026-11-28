@@ -6171,6 +6171,10 @@ function checkRules(m, dir) {
   if (!Number.isInteger(pl.min) || !Number.isInteger(pl.max) || pl.min < 0 || pl.max > 50 || pl.min > pl.max) say("players must be { min, max }, whole numbers, 0 to 50, min at most max");
   if (typeof m.guests !== "boolean") say("guests must be true or false");
   if (m.watch !== undefined) { if (typeof m.watch !== "boolean") say("watch must be true or false"); else if (m.watch && (m.guests !== true || !(m.permissions || []).includes("video"))) say("watch offers Invite someone to watch (people who only see the screen's slides, no controls): it needs guests true and the video permission"); }
+  if (m.face !== undefined) {
+    if (!m.face || typeof m.face !== "object" || Array.isArray(m.face) || Object.keys(m.face).some(k => k !== "players") || (m.face.players !== undefined && typeof m.face.players !== "boolean")) say("face must be { \"players\": true } or { \"players\": false }");
+    else if (m.face.players && (m.guests !== true || !(m.permissions || []).includes("video"))) say("face.players lets Players show their own face and voice: it needs guests true and the video permission");
+  }
   if (m.askName !== undefined) { if (typeof m.askName !== "boolean") say("askName must be true or false"); else if (m.askName && m.guests !== true) say("askName asks a Player their name when they join: it needs guests true"); }
   // visitors: more people than the seats, who send a little and never wait (worker/sdk.js sdkVisMax, sdkVisRate)
   const vi = m.visitors;
@@ -7423,6 +7427,16 @@ function landscapeSheetRule(has, text, warnings) {
     }
   }
 }
+// a warning: an app's own page restyles the kit's keys or the closed Settings tab, or sets a tall fixed height on its remote. On a phone on its side
+// the kit lays the copy of the screen on the left and the keys on the right (shell/sdk/ink.js, shell/controls.css); a page of 300px or more fixed height
+// does not fit a phone in Safari (about 315px tall) and scrolls or hides its buttons
+function landscapeLayoutRule(has, text, warnings) {
+  for (const f of [...has].filter(f => [".html", ".css"].includes(ext(f)))) {
+    const code = (text(f) || "").replace(/\/\*[\s\S]*?\*\//g, "").replace(/<!--[\s\S]*?-->/g, "");
+    if (/(^|[}>\s,])(\.lk-(stage|side|keys|wrap|key|row|top)|\[data-lamba-keys\]|\.g-edge)\b[^{}]*\{/.test(code)) { warnings.push(f + ": restyles Lamba's keys or the closed Settings tab (.lk-*, .g-edge). On a phone on its side the keys stand beside the copy of the screen and the tab is small at the safe edge, the same in every app: leave them alone (docs/sdk/DESIGN.md, \"A phone on its side\")"); return; }
+    if (/(^|[{;\s])(min-)?height\s*:\s*(3[1-9]\d|[4-9]\d\d|\d{4,})px/.test(code.replace(/@media[^{]*\{/g, "{"))) { warnings.push(f + ": sets a fixed height of 310px or more. A phone on its side in Safari is about 315px tall: use vh, min() or clamp() so the page fits one landscape screen without scrolling (docs/sdk/DESIGN.md, \"A phone on its side\")"); return; }
+  }
+}
 function filmRule(m, has, text, say, warnings, where) {
   const seen = new Set();
   for (const f of [...has].filter(f => [".html", ".js"].includes(ext(f)))) {
@@ -7664,6 +7678,7 @@ function checkFiles(o) {
   tvWord(m, say, warnings, pages, text, scriptsOf);
   filmRule(m, has, text, say, warnings, where);
   landscapeSheetRule(has, text, warnings);
+  landscapeLayoutRule(has, text, warnings);
   iconRule(m, has, text, warnings);
   // 17. how the screen runs on old screens (tools/sdk_perf.mjs): style or filter writes every frame, timers that redraw the
   //     scene, a film floor with no lighter copy, sound with no unlock. Warnings here; the review (docs/sdk/REVIEW.md) shows them as findings
